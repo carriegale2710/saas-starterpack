@@ -24,3 +24,8 @@ export const MARKETING_NAV: { label: string; href: string }[] = [
   { label: 'Features', href: '/#features' },
   { label: 'Pricing', href: '/pricing' },
 ];
+
+export const DASHBOARD_NAV: { label: string; href: string }[] = [
+  { label: 'Dashboard', href: '/dashboard' },
+  { label: 'Billing', href: '/billing' },
+];
