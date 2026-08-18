@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { APP_CONFIG, DASHBOARD_NAV } from '@/lib/config';
+import { SignOutButton } from '@/components/auth/sign-out-button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -31,7 +32,6 @@ export function DashboardNav() {
             ))}
           </nav>
         </div>
-        {/* User menu — wired to real session in Stage 3 */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -50,7 +50,9 @@ export function DashboardNav() {
               <Link href="/billing">Billing</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>Sign out — Stage 3</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <SignOutButton />
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
