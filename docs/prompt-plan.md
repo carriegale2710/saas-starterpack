@@ -491,6 +491,25 @@ Before editing:
 4. Inspect current Next.js and Supabase package versions.
 5. Follow the current @supabase/ssr approach. Do not use deprecated helpers.
 
+## CRITICAL: Current Supabase SSR patterns (2026)
+
+Packages: @supabase/ssr + @supabase/supabase-js
+
+DO NOT USE (deprecated):
+- @supabase/auth-helpers-nextjs
+- createServerComponentClient
+- createPagesBrowserClient
+- createMiddlewareClient
+- get/set/remove cookie adapter
+
+USE INSTEAD:
+- createBrowserClient from @supabase/ssr (browser/client components)
+- createServerClient from @supabase/ssr with getAll/setAll cookie adapter (server)
+- await cookies() — cookies() is async in Next.js 15
+- await createClient() — server client factory must be async
+- getUser() for ALL server-side auth checks — never getSession() (can be spoofed)
+- middleware.ts at project root using createServerClient; must return supabaseResponse
+
 ## Implement
 
 - Browser Supabase client
