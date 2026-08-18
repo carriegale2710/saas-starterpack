@@ -10,9 +10,9 @@ Claude Free works best with a single focused task per session. Keep each prompt 
 
 ---
 
-## Project conventions
+## Project Conventions
 
-These conventions apply throughout every stage and every document:
+These conventions apply throughout every stage:
 
 - Use **npm exclusively**. Do not use pnpm or yarn.
 - Commit `package-lock.json`; do not commit `pnpm-lock.yaml` or `yarn.lock`.
@@ -26,7 +26,7 @@ These conventions apply throughout every stage and every document:
 
 ---
 
-## Documentation layout
+## Documentation Layout
 
 The architecture stage produces a split documentation set:
 
@@ -41,38 +41,38 @@ The repository must also contain:
 - `supabase/migrations/0001_initial.sql` — real initial migration
 - `package-lock.json` — npm dependency lockfile
 
-Later stages must read the relevant split documents and update all affected files when implementation changes a decision or contract.
+Later stages must read the relevant documents and update all affected files when implementation changes a decision or contract.
 
 ---
 
-## Tool assignment by stage
+## Tool Assignment by Stage
 
 | Stage                 | Perplexity Pro                          | Claude Free                         | Local tools                                     |
 | --------------------- | --------------------------------------- | ----------------------------------- | ----------------------------------------------- |
-| Architecture plan     | Draft architecture, research vendors    | —                                   | Review docs in VS Code                          |
+| Architecture plan     | Draft architecture and research vendors | —                                   | Review docs in VS Code                          |
 | Foundation            | Verify current Next.js and npm guidance | Scaffold app, config, shell, layout | `npm run dev`, lint, build                      |
 | Supabase auth/RLS     | Check SSR approach and current SDK docs | Implement auth, migrations, RLS     | `npx supabase db reset`, type generation, tests |
 | Stripe billing        | Verify webhook events and SDK version   | Implement billing, webhooks, gates  | `stripe listen`, Vitest                         |
 | Optional integrations | Research module setup if needed         | Implement selected modules only     | Environment toggle tests, build                 |
 | Testing/docs          | Review documentation accuracy           | Add missing tests, fix docs         | Vitest, Playwright, build                       |
 | Security review       | Independent security audit              | Fix confirmed critical/high issues  | Full test suite, `git diff`                     |
-| Final validation      | —                                       | Final release-readiness sweep       | Clean checkout, all checks                      |
+| Final validation      | Independent release-readiness review    | Final validation fixes              | Clean checkout, all checks                      |
 
 ---
 
-## Per-stage workflow
+## Per-Stage Workflow
 
 For every stage, follow this loop:
 
 1. **Perplexity Pro** — research current requirements, vendor docs, and breaking changes. Update `docs/` if a decision changes.
 2. **Claude Free** — provide only the current stage prompt and relevant documentation. Ask it to inspect the repository before editing.
-3. **Local tools** — run tests and verification commands. If failures occur, return the exact output and relevant files to Claude Free.
+3. **Local tools** — run tests and verification commands.
 4. **Perplexity Pro, if needed** — independently review issues involving Stripe, Supabase, RLS, security, or current external APIs.
 5. **Git** — review `git diff` before committing.
 
 ---
 
-## Claude Free: bounded sessions
+## Claude Free: Bounded Sessions
 
 Claude Free has a context limit. Stay within it by:
 
@@ -86,7 +86,7 @@ If Claude Free reaches its limit mid-stage, split the remaining work into a seco
 
 ---
 
-## When to escalate to Perplexity Pro
+## When to Escalate to Perplexity Pro
 
 Use Perplexity Pro before returning to Claude Free when:
 
@@ -100,7 +100,7 @@ Perplexity Pro is the source of truth for current external APIs. Claude Free is 
 
 ---
 
-## When Claude Pro becomes worthwhile
+## When Claude Pro Becomes Worthwhile
 
 Consider upgrading Claude Free to Claude Pro when:
 
@@ -110,11 +110,11 @@ Consider upgrading Claude Free to Claude Pro when:
 - You want Claude Code to inspect, edit, test, and iterate in one workflow
 - You are actively shipping multiple SaaS products every week
 
-> Complete Stage 2 with the current combination first. If free-tier limits materially slow you down during Stage 3 or Stage 4, buy Claude Pro for one month and reassess.
+Complete Stage 2 with the current combination first. If free-tier limits materially slow down Stage 3 or Stage 4, buy Claude Pro for one month and reassess.
 
 ---
 
-## Recommended Git checkpoints
+## Recommended Git Checkpoints
 
 ```bash
 git add docs/implementation-plan.md docs/schema.md docs/decisions.md README.md CLAUDE.md
@@ -154,25 +154,15 @@ git commit -m "Describe the completed stage"
 
 ---
 
-## Before starting
+# Before Starting
 
-### Step 1: Create the repository
+## Create the Repository
 
 ```bash
 mkdir my-saas-template
 cd my-saas-template
 git init
 ```
-
-### Step 2: Run Perplexity Pro first (Stage 1)
-
-Use Perplexity Pro to draft the architecture documentation. Save the output to `docs/`. Do not open a Claude Free session until these files exist and are reviewed:
-
-- `docs/implementation-plan.md`
-- `docs/schema.md`
-- `docs/decisions.md`
-- `README.md`
-- `CLAUDE.md`
 
 ---
 
@@ -184,7 +174,11 @@ Use Perplexity Pro to draft the architecture documentation. Save the output to `
 
 Produce architecture documentation without writing application code.
 
-## Perplexity Pro prompt
+## Perplexity Pro Step
+
+Use Perplexity Pro to produce the architecture documentation before any application code is written.
+
+## Prompt
 
 ```text
 You are the lead engineer designing a reusable starter repository for lean, subscription-based micro-SaaS applications.
@@ -327,7 +321,7 @@ For every proposed dependency, state why it is needed, whether it is core or opt
 Before finishing, identify contradictions and unnecessary complexity, and ask no more than five decisions requiring approval.
 ```
 
-## Completed record
+## Completed Record
 
 After Stage 1 is complete, verify that the documentation includes:
 
@@ -347,26 +341,36 @@ After Stage 1 is complete, verify that the documentation includes:
 - Module schema-impact warnings
 - Documentation split across all required files
 
-Commit the checkpoint:
+## Checkpoint
 
 ```bash
 git add docs/implementation-plan.md docs/schema.md docs/decisions.md README.md CLAUDE.md
 git commit -m "stage 1: architecture plan"
 ```
 
-## Note - This stage was redone by Perplexity Pro after Claude at beginning of project
-
-Refer to `docs/stage1-version-comparison.md` for notes on what changed and why the latest iteration is better.
-
 ---
 
-# Stage 2: Project foundation
+# Stage 2: Project Foundation
 
-**Claude Free stage.**
+**Perplexity Pro and Claude Free stage.**
 
-Before opening Claude Free, use Perplexity Pro to confirm the current Next.js App Router setup, shadcn/ui initialization, and npm conventions. Update `docs/decisions.md` if anything changes.
+## Perplexity Pro Step
 
-## Claude Free prompt
+Before opening Claude Free, use Perplexity Pro to verify:
+
+- The current Next.js App Router setup approach
+- The current shadcn/ui initialization approach
+- The supported Node.js version
+- npm installation and lockfile conventions
+- Relevant breaking changes in the current Next.js ecosystem
+
+Confirm that the project will use npm exclusively with `package-lock.json`.
+
+Confirm that application-library code belongs under `lib/`, not `src/lib/`.
+
+Update `docs/decisions.md` if the research changes an architectural decision.
+
+## Claude Free Step
 
 ```text
 Implement the foundation phase from docs/implementation-plan.md, docs/schema.md, and docs/decisions.md.
@@ -416,7 +420,7 @@ Run formatting, lint, type checking, and a production build.
 At the end, report files changed, commands run, assumptions, known limitations, and the recommended next phase.
 ```
 
-## Local verification
+## Local Verification
 
 ```bash
 npm run dev
@@ -432,13 +436,26 @@ git commit -m "stage 2: project foundation"
 
 ---
 
-# Stage 3: Supabase authentication
+# Stage 3: Supabase Authentication
 
-**Claude Free stage.**
+**Perplexity Pro and Claude Free stage.**
 
-Before opening Claude Free, use Perplexity Pro to verify the current `@supabase/ssr` approach for Next.js App Router.
+## Perplexity Pro Step
 
-## Claude Free prompt
+Before opening Claude Free, use Perplexity Pro to verify:
+
+- The current `@supabase/ssr` approach for Next.js App Router
+- Current Supabase browser and server client patterns
+- Current session-refresh and middleware guidance
+- Current Supabase CLI migration commands
+- Current Supabase type-generation commands
+- Relevant changes to Supabase Auth or RLS behaviour
+
+Ask Perplexity Pro to identify deprecated helpers or examples Claude Free might use incorrectly.
+
+Update `docs/decisions.md`, `docs/schema.md`, or `README.md` if the research changes the implementation approach.
+
+## Claude Free Step
 
 ```text
 Implement the Supabase authentication and database foundation described in the approved plan.
@@ -522,7 +539,7 @@ Run:
 Update README, docs/schema.md, and CLAUDE.md if new conventions are introduced.
 ```
 
-## Local verification
+## Local Verification
 
 ```bash
 npx supabase db reset
@@ -548,20 +565,37 @@ git commit -m "stage 3: Supabase authentication"
 
 ---
 
-# Stage 4: Stripe billing
+# Stage 4: Stripe Billing
 
-**Claude Free stage, with Perplexity Pro used to verify webhook events and SDK version first.**
+**Perplexity Pro and Claude Free stage.**
 
-Stripe billing is high-risk. Before opening Claude Free:
+Stripe billing is high-risk.
 
-- Confirm the current Stripe Node SDK version
-- Confirm the pinned Stripe API version
-- Confirm subscription lifecycle event names
-- Verify the atomic webhook claim pattern
-- Confirm `invoice.paid` handling
-- Confirm the default `past_due` policy is no access
+## Perplexity Pro Step
 
-## Claude Free prompt
+Before opening Claude Free, use Perplexity Pro to verify:
+
+- The current compatible Stripe Node SDK version
+- The Stripe API version used by the project
+- The relationship between SDK and API versions
+- Current subscription lifecycle event names
+- Required fields on subscription and invoice events
+- Webhook signature-verification guidance
+- The atomic database claim pattern
+- The `invoice.paid` entitlement requirement
+- Safe retry behaviour for failed webhook processing
+
+Ask Perplexity Pro to specifically review:
+
+- `INSERT ... ON CONFLICT DO NOTHING`
+- `pending`, `processing`, `processed`, and `failed` states
+- The transaction boundary between subscription upsert and event completion
+- Stale-processing recovery using `updated_at`
+- The default `past_due` entitlement policy
+
+Update `docs/decisions.md`, `docs/schema.md`, and `README.md` before implementation if the research changes anything.
+
+## Claude Free Step
 
 ```text
 Implement the Stripe subscription module from the approved architecture plan.
@@ -588,7 +622,7 @@ Stripe modules:
 
 Use the validated environment object when initializing Stripe.
 
-Pin the Stripe Node SDK to a specific version in package.json. Record the API version in STRIPE_API_VERSION. Upgrade and test both deliberately.
+Pin the Stripe Node SDK to a specific version in package.json. Record the API version in STRIPE_API_VERSION. Do not rely on the environment API string alone.
 
 Pages and routes:
 
@@ -685,7 +719,7 @@ Document:
 - Stale-processing recovery
 ```
 
-## Local verification
+## Local Verification
 
 ```bash
 stripe listen --forward-to localhost:3000/api/stripe/webhook
@@ -712,22 +746,39 @@ git commit -m "stage 4: Stripe billing"
 
 ---
 
-# Stage 5: Optional integrations
+# Stage 5: Optional Integrations
 
-**Claude Free stage.**
+**Perplexity Pro and Claude Free stage.**
 
-Use Perplexity Pro first to check current setup documentation for any selected module, especially Resend, PostHog, Sentry, and other frequently changing SDKs.
+## Perplexity Pro Step
 
-## Important module rule
+Before opening Claude Free, use Perplexity Pro to verify current setup and SDK guidance for each selected module:
 
-Workspaces and usage-based billing are not necessarily schema-neutral:
+- Resend
+- PostHog
+- Sentry
+- Supabase Storage
+- Workspaces
+- Usage-based billing
+- Background jobs
 
-- Workspaces may require workspace, membership, ownership, and billing relationships.
-- Usage-based billing may require usage-event tables, metering relationships, or a billing-owner field on subscriptions.
+For every selected module, confirm:
 
-Review and document these impacts before implementation.
+- Current package and setup instructions
+- Required environment variables
+- Server-only versus browser-safe usage
+- Whether the module requires a database migration
+- Whether it affects `profiles`, `subscriptions`, or billing ownership
+- How it can be disabled or removed safely
 
-## Claude Free prompt
+Pay particular attention to:
+
+- Workspaces requiring workspace and membership relationships
+- Usage-based billing requiring usage tables, metering relationships, or billing-owner changes
+
+Update `docs/decisions.md`, `docs/schema.md`, `README.md`, and `docs/implementation-plan.md` if the research identifies schema or architectural impacts.
+
+## Claude Free Step
 
 ```text
 Implement only the following optional modules:
@@ -745,7 +796,7 @@ Before editing:
 For each selected module:
 
 - Isolate vendor-specific code under lib/modules/<module>/
-- Use lib/, never src/lib/
+- Never use src/lib/
 - Disable the module when its environment variables are absent
 - Add typed configuration
 - Add a small adapter API
@@ -761,7 +812,7 @@ Workspaces and usage-based billing must not silently alter core billing semantic
 Run lint, type checking, tests, and build. Update README and CLAUDE.md.
 ```
 
-## Local verification
+## Local Verification
 
 Remove optional environment variables and confirm that the app still builds and runs.
 
@@ -781,25 +832,37 @@ git commit -m "stage 5: optional integrations"
 
 ---
 
-# Stage 6: Testing and documentation
+# Stage 6: Testing and Documentation
 
-**Perplexity Pro first, then Claude Free.**
+**Perplexity Pro and Claude Free stage.**
 
-Use Perplexity Pro to audit the documentation for accuracy. Check:
+## Perplexity Pro Step
 
+Audit the current documentation before opening Claude Free.
+
+Verify:
+
+- npm commands and `package-lock.json` usage
+- `package.json` scripts referenced by the documentation
+- Supabase CLI migration commands
 - Supabase type-generation commands
-- Stripe CLI commands
+- Current `@supabase/ssr` guidance
+- Stripe CLI webhook commands
 - Stripe event names
-- Stripe SDK and API-version guidance
+- Stripe SDK and API-version pinning
 - Vercel deployment steps
-- npm scripts
-- Migration paths
-- RLS wording
-- Stale webhook recovery instructions
+- RLS and service-role wording
+- `webhook_events` naming consistency
+- `lib/` path consistency
+- Initial migration requirements
+- Atomic webhook transaction-boundary documentation
+- Stale-processing recovery
+- Default `past_due` denial policy
+- Workspaces and usage-billing schema-impact warnings
 
-Paste corrections into the documentation before giving Claude Free the stage prompt.
+Apply documentation corrections before giving Claude Free the stage prompt.
 
-## Claude Free prompt
+## Claude Free Step
 
 ```text
 Audit and complete the testing and documentation for the reusable SaaS starter.
@@ -901,20 +964,20 @@ git commit -m "stage 6: testing and documentation"
 
 ---
 
-# Stage 7: Security review
+# Stage 7: Security Review
 
 **Perplexity Pro for the audit brief; Claude Free applies confirmed fixes.**
 
-Use Perplexity Pro to produce an independent security audit. Bring the findings to Claude Free as a structured fix list.
+## Perplexity Pro Step
 
-## Perplexity Pro security audit prompt
+Perform an independent security and correctness audit before Claude Free changes the code.
 
-```text
-Perform an independent security and correctness review of a Next.js + Supabase + Stripe SaaS starter.
+Use current OWASP, Supabase, Stripe, and Next.js guidance where relevant.
 
-Review these areas:
+Review:
 
-Authentication:
+### Authentication
+
 - Session handling
 - Protected routes
 - Cross-user data access
@@ -922,7 +985,8 @@ Authentication:
 - Correct Supabase client usage
 - Service-role client isolation
 
-Authorization:
+### Authorization
+
 - Server-side checks
 - User IDs derived from sessions rather than request bodies
 - Server-side entitlement checks
@@ -930,28 +994,31 @@ Authorization:
 - Checkout price authorization
 - Customer ownership resolution
 
-Supabase:
+### Supabase
+
 - Service-role key isolation
 - RLS enabled and restrictive
-- No auth.uid() IS NULL policies
+- No `auth.uid() IS NULL` policies
 - Privileged tables with no authenticated-user policies
 - Constraints and indexes
 - Transaction boundaries
 - Migration correctness
 - Privileged operation isolation
 
-Stripe:
+### Stripe
+
 - Webhook signature verification
 - Atomic idempotency
-- webhook_events naming consistency
+- `webhook_events` naming consistency
 - Billing state from Stripe events only
 - Checkout metadata ownership
 - Cancellation and payment-failure handling
-- invoice.paid handling
+- `invoice.paid` handling
 - Client manipulation of price IDs or entitlements
 - Stripe SDK and API-version compatibility
 
-Application security:
+### Application Security
+
 - Input validation
 - Safe redirects
 - Error messages that do not leak secrets
@@ -959,23 +1026,32 @@ Application security:
 - Rate-sensitive endpoints
 - Secret exposure in browser bundles
 
-Maintainability:
+### Maintainability
+
 - npm consistency
-- lib/ path consistency
+- `lib/` path consistency
 - Product-neutral template
 - Removable optional modules
 - Clear separation of responsibilities
 - Documentation consistency
 
-Produce findings ranked critical, high, medium, low, or informational with:
+Produce findings ranked:
 
-- File references
-- Why each issue matters
-- The smallest safe fix
-- Remaining risks
-```
+- Critical
+- High
+- Medium
+- Low
+- Informational
 
-## Claude Free prompt
+For every finding include:
+
+- File reference
+- Security or correctness impact
+- Smallest safe fix
+- Whether the issue blocks release
+- Remaining risk after the fix
+
+## Claude Free Step
 
 ```text
 Apply the following security fixes confirmed by independent review.
@@ -1017,13 +1093,38 @@ git commit -m "stage 7: security review"
 
 ---
 
-# Stage 8: Final validation
+# Stage 8: Final Validation
 
-**Claude Free stage.**
+**Perplexity Pro, Claude Free, and local validation stage.**
 
-The test suite and a clean checkout are the source of truth.
+## Perplexity Pro Step
 
-## Claude Free prompt
+Before the final Claude Free pass, perform an independent release-readiness review.
+
+Check:
+
+- All eight stages are represented in `prompt-plan.md`
+- Every stage has explicit Perplexity Pro and Claude Free instructions
+- npm is used consistently
+- `package-lock.json` is present and referenced
+- No pnpm or yarn commands remain
+- `lib/` is used consistently
+- No `src/lib/` references remain
+- `webhook_events` is used consistently
+- No `stripe_events` references remain
+- `supabase/migrations/0001_initial.sql` exists
+- Webhook processing has an atomic transaction boundary
+- Stale-processing recovery is documented
+- `past_due` defaults to no access
+- Service-role RLS wording is correct
+- Stripe SDK and API version are both pinned
+- Optional module schema-impact warnings remain
+- README commands match `package.json`
+- Final acceptance criteria are testable
+
+Return a concise release-readiness report with blocking issues separated from non-blocking improvements.
+
+## Claude Free Step
 
 ```text
 Perform a final release-readiness check for this reusable SaaS template.
@@ -1083,7 +1184,7 @@ Report:
 - Recommended tag name, such as v0.1.0-template
 ```
 
-## Local verification
+## Local Verification
 
 Run this from a clean checkout:
 
@@ -1118,7 +1219,7 @@ grep -R "pnpm\|yarn\|src/lib\|stripe_events" . \
 
 The search should return no project-documentation or source-code references.
 
-## Final commit and tag
+## Final Commit and Tag
 
 ```bash
 git add .
