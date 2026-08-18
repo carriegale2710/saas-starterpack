@@ -38,8 +38,8 @@ A minimal, maintainable modular monolith for solo-founder subscription SaaS prod
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/your-username/my-saas-template.git
-cd my-saas-template
+git clone https://github.com/your-username/saas-starterpack.git
+cd saas-starterpack
 npm install
 ```
 

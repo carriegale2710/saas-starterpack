@@ -159,8 +159,8 @@ git commit -m "Describe the completed stage"
 ## Create the Repository
 
 ```bash
-mkdir my-saas-template
-cd my-saas-template
+mkdir saas-starterpack
+cd saas-starterpack
 git init
 ```
 
