@@ -19,3 +19,8 @@ export const BILLING_CONFIG = {
    */
   pastDueGracePeriod: false,
 } as const;
+
+export const MARKETING_NAV: { label: string; href: string }[] = [
+  { label: 'Features', href: '/#features' },
+  { label: 'Pricing', href: '/pricing' },
+];
