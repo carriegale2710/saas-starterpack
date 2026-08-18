@@ -9,6 +9,24 @@ Follows [Keep a Changelog](https://keepachangelog.com) conventions.
 
 ---
 
+## Stage 2 — Post-Scaffold Fixes
+_2026-08-19_
+
+### Fixed
+- `package.json` — added 5 missing Radix UI peer dependencies required by shadcn-style components:
+  `@radix-ui/react-slot`, `react-label`, `react-separator`, `react-avatar`, `react-dropdown-menu`
+- `components/ui/input.tsx` — replaced empty `interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}` with `type InputProps = ...` to resolve `@typescript-eslint/no-empty-object-type` build error
+- `docs/decisions.md` — added Decision #13: npm audit flag review and corrected risk assessment
+
+### Security audit review (next@15.5.23 — latest stable 15.x)
+- `postcss` ≤8.5.22 XSS (GHSA-qx2v-qp2m-jg93) — **not exploitable**: build-tool use only; attack requires runtime user CSS re-embedding which Next.js never does
+- `postcss` source map path traversal — **not exploitable**: source maps generated from own source files, not attacker input
+- `sharp` <0.35.0 libvips CVEs — **low risk at Stage 2**: only relevant if `next/image` serves user-uploaded images; reassess at Stage 7
+- `esbuild` ≤0.24.2 dev-server interception — **dev-only, moderate**: fix deferred to Stage 6 via `vitest@^4.0.0` upgrade
+- `npm audit fix --force` must not be run — would silently upgrade to `next@16.3.1` (breaking major)
+
+---
+
 ## Stage 2 — Project Foundation
 _2026-08-18_
 
