@@ -1,16 +1,317 @@
 # Database Schema
 
-## 3. Core Database Schema
+## Authoritative Schema Definition
 
-`auth.users` is managed by Supabase Auth and is not modified directly. All app tables live in `public` and hang off `auth.users.id`.
-
-| Table           | Columns                                                                                                                                                                                                                                                                                                                  | Notes                                                                                                                                                                                                                                                                                                  |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `profiles`      | `id uuid PK references auth.users(id)`, `full_name text`, `avatar_url text`, `created_at timestamptz default now()`, `updated_at timestamptz default now()`                                                                                                                                                              | 1:1 with a user. Row created lazily on first authenticated request if missing.                                                                                                                                                                                                                         |
-| `customers`     | `user_id uuid PK references auth.users(id)`, `stripe_customer_id text unique not null`, `created_at timestamptz default now()`                                                                                                                                                                                           | Maps a user to exactly one Stripe Customer. Populated lazily — see §4/§5 — never at signup. Written only by server code holding the service-role client, via an idempotent get-or-create so concurrent requests can't create two Stripe Customers for the same user (§7 discusses the resolver shape). |
-| `subscriptions` | `id text PK` (Stripe subscription id), `user_id uuid references auth.users(id)`, `stripe_customer_id text not null`, `status text not null, `price_id text`, `quantity int`, `cancel_at_period_end boolean`, `current_period_end timestamptz`, `created_at timestamptz default now()`, `updated_at timestamptz not null` | Mirrors the Stripe Subscription object. Upserted by the webhook handler only. This table, not Stripe, is what the app reads on every request for entitlement checks — Stripe is source of truth for _correctness_, this table is source of truth for _read latency_.                                   |
-| `stripe_events` | `id text PK` (Stripe event id), `type text not null`, `status text not null default 'processing'`, `created_at timestamptz default now()`, `updated_at timestamptz not null`                                                                                                                                             | Idempotency ledger. See §6.                                                                                                                                                                                                                                                                            |
-
-No ORM, no schema-management DSL: schema lives as plain, numbered SQL migration files under `supabase/migrations`, applied via the Supabase CLI. Types are generated from the live schema (`supabase gen types typescript`) rather than hand-maintained or derived from an ORM model layer.
+This document defines the complete Supabase PostgreSQL schema for the core SaaS starter. The canonical migration lives at `supabase/migrations/0001_initial.sql` — this document and that file must stay in sync.
 
 ---
+
+## Core Tables
+
+### `profiles`
+
+User profile data, synced from Supabase Auth on signup.
+
+```sql
+CREATE TABLE profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL UNIQUE,
+  full_name TEXT,
+  avatar_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_profiles_email ON profiles(email);
+CREATE INDEX idx_profiles_created_at ON profiles(created_at);
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_profiles_updated_at
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own profile"
+  ON profiles FOR SELECT
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile"
+  ON profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
+```
+
+> The service-role key bypasses RLS on all tables. No policy is needed to grant service-role access — the bypass is unconditional at the Supabase level.
+
+---
+
+### `subscriptions`
+
+Subscription state, synced from Stripe webhooks. **Source of truth** for billing status.
+
+```sql
+CREATE TYPE subscription_status AS ENUM (
+  'active',
+  'past_due',
+  'unpaid',
+  'canceled',
+  'incomplete',
+  'incomplete_expired',
+  'trialing'
+);
+
+CREATE TABLE subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  stripe_customer_id TEXT NOT NULL UNIQUE,
+  stripe_subscription_id TEXT UNIQUE,
+  status subscription_status NOT NULL DEFAULT 'incomplete',
+  plan_id TEXT NOT NULL,
+  current_period_start TIMESTAMPTZ,
+  current_period_end TIMESTAMPTZ,
+  cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
+  canceled_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_subscriptions_user_id ON subscriptions(user_id);
+CREATE INDEX idx_subscriptions_stripe_customer_id ON subscriptions(stripe_customer_id);
+CREATE INDEX idx_subscriptions_stripe_subscription_id ON subscriptions(stripe_subscription_id);
+CREATE INDEX idx_subscriptions_status ON subscriptions(status);
+CREATE INDEX idx_subscriptions_period_end ON subscriptions(current_period_end);
+
+CREATE TRIGGER update_subscriptions_updated_at
+  BEFORE UPDATE ON subscriptions
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Users may read their own subscription (for billing page display)
+CREATE POLICY "Users can read own subscriptions"
+  ON subscriptions FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- No authenticated-user write policies.
+-- All writes come from the webhook handler using the service-role key,
+-- which bypasses RLS unconditionally.
+```
+
+---
+
+### `webhook_events`
+
+Atomic webhook event log for idempotent processing.
+
+```sql
+CREATE TYPE webhook_event_status AS ENUM (
+  'pending',
+  'processing',
+  'processed',
+  'failed'
+);
+
+CREATE TABLE webhook_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  stripe_event_id TEXT NOT NULL UNIQUE,
+  event_type TEXT NOT NULL,
+  status webhook_event_status NOT NULL DEFAULT 'pending',
+  payload JSONB NOT NULL,
+  error_message TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),  -- required for stale-processing recovery
+  processed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_webhook_events_stripe_event_id ON webhook_events(stripe_event_id);
+CREATE INDEX idx_webhook_events_event_type ON webhook_events(event_type);
+CREATE INDEX idx_webhook_events_status ON webhook_events(status);
+CREATE INDEX idx_webhook_events_created_at ON webhook_events(created_at);
+CREATE INDEX idx_webhook_events_updated_at ON webhook_events(updated_at);  -- for stale recovery
+
+CREATE TRIGGER update_webhook_events_updated_at
+  BEFORE UPDATE ON webhook_events
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE webhook_events ENABLE ROW LEVEL SECURITY;
+
+-- No authenticated-user policies on this table.
+-- Access is exclusively through the service-role key (webhook handler),
+-- which bypasses RLS unconditionally.
+-- Adding an auth.uid() IS NULL policy would be incorrect and misleading.
+```
+
+---
+
+## Atomic Webhook Processing
+
+The webhook handler must execute the claim, subscription upsert, and status update atomically:
+
+```sql
+-- Step 1: Claim (outside transaction — fast path)
+UPDATE webhook_events
+SET status = 'processing', attempts = attempts + 1
+WHERE stripe_event_id = $1 AND status = 'pending'
+RETURNING id;
+-- If no row returned: already claimed, return 200 immediately.
+
+-- Step 2: Process (inside transaction)
+BEGIN;
+  -- Upsert subscription state
+  INSERT INTO subscriptions (...) VALUES (...)
+  ON CONFLICT (stripe_subscription_id) DO UPDATE SET ...;
+
+  -- Mark event done
+  UPDATE webhook_events
+  SET status = 'processed', processed_at = NOW()
+  WHERE id = $event_row_id;
+COMMIT;
+-- On any error: ROLLBACK — event reverts to 'processing' for recovery.
+```
+
+**Stale-processing recovery** (run on a schedule or manually):
+
+```sql
+UPDATE webhook_events
+SET status = 'pending', error_message = 'reset after stale processing'
+WHERE status = 'processing'
+  AND updated_at < NOW() - INTERVAL '10 minutes';
+```
+
+---
+
+## Constraints & Validation
+
+```sql
+ALTER TABLE subscriptions ADD CONSTRAINT chk_subscription_periods
+  CHECK (current_period_end IS NULL OR current_period_start IS NULL
+         OR current_period_end >= current_period_start);
+
+ALTER TABLE subscriptions ADD CONSTRAINT chk_stripe_customer_id_not_empty
+  CHECK (stripe_customer_id != '');
+```
+
+---
+
+## Entitlement Logic
+
+Access policy is defined in `lib/config.ts` (`BILLING_CONFIG`). The **template default** is conservative:
+
+| Status                                                   | Default Access                                                          |
+| -------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `active`, `trialing`                                     | Full access                                                             |
+| `past_due`                                               | **No access** — override via `BILLING_CONFIG.pastDueGracePeriod = true` |
+| `canceled`, `unpaid`, `incomplete`, `incomplete_expired` | No access                                                               |
+| No subscription record                                   | No access                                                               |
+
+**Unknown-status handling:** Any status not matched by `lib/entitlements.ts` denies access by default.
+
+---
+
+## RLS Expectations
+
+| Table            | Authenticated User Access   | Service-Role Access        |
+| ---------------- | --------------------------- | -------------------------- |
+| `profiles`       | Read/write own row only     | Full access (RLS bypassed) |
+| `subscriptions`  | Read own rows only          | Full access (RLS bypassed) |
+| `webhook_events` | **No access** (no policies) | Full access (RLS bypassed) |
+
+The service-role key bypasses RLS unconditionally — this is a Supabase platform behaviour, not a policy.
+
+---
+
+## Migration Strategy
+
+### Initial Migration
+
+The repository ships with a real numbered migration file:
+
+`supabase/migrations/0001_initial.sql`
+
+This file contains all DDL from this document (tables, types, triggers, indexes, constraints, RLS enables, and policies). It must exist **before Stage 3 implementation begins**.
+
+```bash
+# Apply to local Supabase
+npx supabase db reset
+
+# Apply to linked remote project
+npx supabase db push
+```
+
+### Adding Migrations
+
+```bash
+npx supabase migration new <description>
+# Edit the generated file, then:
+npx supabase db push
+```
+
+### Adding Optional Modules
+
+Each optional module adds its own migration file. `workspaces` and `usage-billing` are **not** schema-neutral — they add tables with foreign-key relationships to `profiles` or `subscriptions`. Review carefully before activating.
+
+```sql
+-- Example: workspaces module (own migration file)
+CREATE TABLE workspaces (
+  id UUID PRIMARY KEY,
+  owner_id UUID REFERENCES profiles(id),
+  name TEXT NOT NULL
+);
+```
+
+### Rollback
+
+```bash
+npx supabase db reset  # Reset to migration 0 (local only)
+```
+
+---
+
+## Performance Considerations
+
+```sql
+-- Entitlement check (hot path)
+SELECT status, plan_id, current_period_end
+FROM subscriptions
+WHERE user_id = auth.uid()
+ORDER BY created_at DESC
+LIMIT 1;
+```
+
+All foreign keys and frequently queried columns are indexed.
+
+---
+
+## Next Steps
+
+1. Generate `supabase/migrations/0001_initial.sql` from this document
+2. Run `npx supabase db reset` to verify the migration applies cleanly
+3. Generate TypeScript types: `npx supabase gen types typescript --local > lib/database.types.ts`
+4. Review RLS policies with multiple test users

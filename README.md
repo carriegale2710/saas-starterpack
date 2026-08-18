@@ -1,160 +1,383 @@
-# Micro-SaaS Starter
+# SaaS Starterpack
 
-A reusable Next.js, Supabase, Stripe, and Vercel starter for solo developers shipping subscription SaaS products.
+A minimal, maintainable modular monolith for solo-founder subscription SaaS products.
 
-## What This Provides
+## Features
 
-- Next.js App Router and TypeScript modular monolith
-- Supabase Auth, PostgreSQL, generated types, and RLS
-- Stripe-hosted Checkout and Customer Portal
-- Webhook-driven subscription entitlements
-- Vitest unit/integration tests and Playwright application-flow tests
-- Manual Supabase migration deployment
+- ✅ Public marketing page
+- ✅ Authentication (Supabase Auth)
+- ✅ Protected dashboard
+- ✅ User profile management
+- ✅ Supabase PostgreSQL with RLS
+- ✅ Stripe Checkout + Customer Portal
+- ✅ Stripe webhook synchronization
+- ✅ Subscription entitlements
+- ✅ Environment validation
+- ✅ Basic tests (Vitest)
 
-## Architecture
+## Tech Stack
 
-Keep product code inside the application and keep infrastructure boring: Server Components, Server Actions, and Route Handlers talk directly to Supabase and Stripe. Do not add an ORM, queue, Redis, microservice, or embedded card UI until a real product requirement justifies it.
+- **Framework:** Next.js 14+ (App Router)
+- **Language:** TypeScript (strict mode)
+- **Styling:** Tailwind CSS + shadcn/ui-style components
+- **Database:** Supabase PostgreSQL
+- **Auth:** Supabase Auth
+- **Billing:** Stripe (Checkout, Portal, Webhooks)
+- **Deployment:** Vercel
 
-Stripe is the billing-state source of truth; the local subscription table is the read model used for fast entitlement checks. Never grant access from a Checkout redirect.
+## Quick Start
 
-## Billing Rules
+### Prerequisites
 
-- Checkout and Portal requests require a server-verified authenticated user.
-- Stripe Customers are provisioned lazily on first Checkout or Portal use.
-- `customers.user_id` is unique, but a rare concurrent first-use race may leave one unused Stripe Customer orphan in Stripe; this is accepted and should be cleaned up manually if encountered.
-- Webhooks verify the raw request signature before database access, atomically claim event IDs, retry failed processing, and return success only after processing completes.
-- Entitlement-controlling events are subscription lifecycle events plus `invoice.paid` and `invoice.payment_failed`.
+- Node.js 20+
+- npm (comes pre-installed with Node; no additional package manager needed)
+- Supabase account (free tier)
+- Stripe account (test mode)
+- Vercel account (free tier)
 
-## Authentication
-
-The initial UI is email/password only. Forgot-password sends a generic confirmation, and the recovery callback exchanges the Supabase code before allowing a password update. Keep the auth form extensible for later magic-link or OAuth additions.
-
-## Local Development
+### 1. Clone & Install
 
 ```bash
+git clone https://github.com/your-username/my-saas-template.git
+cd my-saas-template
 npm install
-supabase start
-supabase db reset
+```
+
+### 2. Environment Setup
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` with your credentials:
+
+```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key  # Server-side only
+
+# Stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID_PRO=price_...
+STRIPE_API_VERSION=2024-06-20  # Pinned — change only after deliberate upgrade
+
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### 3. Supabase Setup
+
+```bash
+# Install Supabase CLI
+npm install -g supabase
+
+# Login
+npx supabase login
+
+# Link to your project
+npx supabase link --project-ref your-project-ref
+
+# Apply migrations (includes initial migration at supabase/migrations/0001_initial.sql)
+npx supabase db push
+```
+
+### 4. Stripe Setup
+
+#### 4.1 Create Products & Prices
+
+In Stripe Dashboard: **Products → Add product**, create "Pro Plan" with monthly price, copy price ID to `STRIPE_PRICE_ID_PRO`.
+
+#### 4.2 Pin the Stripe Node SDK
+
+The `package.json` pins a specific Stripe SDK version alongside the API version:
+
+```json
+"stripe": "16.x"
+```
+
+Both the SDK version and `STRIPE_API_VERSION` must be updated together and tested before deploying.
+
+#### 4.3 Configure Webhooks
+
+In Stripe Dashboard: **Developers → Webhooks**, add endpoint `https://your-domain.com/api/stripe/webhook` with these events:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
+
+Copy the webhook signing secret to `STRIPE_WEBHOOK_SECRET`.
+
+### 5. Run Development Server
+
+```bash
 npm run dev
 ```
 
-`supabase db reset` is destructive: it drops and recreates the local database. Never use it as a remote deployment command.
+Open http://localhost:3000
 
-## Migrations
-
-Apply migrations manually and before deploying code that depends on them:
+### 6. Deploy to Vercel
 
 ```bash
-supabase migration list
-supabase db push --dry-run
-supabase db push
+npm install -g vercel
+vercel
+# Set environment variables in Vercel dashboard, then:
+vercel --prod
 ```
 
-Review the dry run. Confirm the migration list after deployment.
+## Database Schema
+
+See [`docs/schema.md`](docs/schema.md) for complete schema definition and the initial migration at `supabase/migrations/0001_initial.sql`.
+
+### Core Tables
+
+- `profiles` — User profiles (synced from Auth)
+- `subscriptions` — Subscription state (synced from Stripe)
+- `webhook_events` — Webhook event log (idempotency)
+
+### Row Level Security
+
+All tables have RLS enabled. The **service-role key bypasses RLS entirely** — it is not granted access through any policy. Authenticated users access only their own rows via `auth.uid()` policies. The `webhook_events` table has no authenticated-user policies; the service-role key is the only means of access.
+
+## Authentication
+
+### Signup Flow
+
+1. User visits `/signup`
+2. Enters email + password
+3. Supabase sends confirmation email
+4. User clicks link → `/auth/callback`
+5. Profile created in `profiles` table
+6. Redirect to `/dashboard`
+
+### Password Recovery
+
+1. User visits `/forgot-password`
+2. Enters email
+3. Supabase sends reset link
+4. User clicks link → `/reset-password`
+5. Enters new password
+6. Redirect to `/login`
+
+## Stripe Integration
+
+### Checkout Flow
+
+1. User visits `/pricing`
+2. Selects plan → `/api/stripe/checkout`
+3. Create Checkout Session with `user_id` metadata
+4. Redirect to Stripe Checkout URL
+5. User completes payment
+6. Stripe redirects to `/dashboard?session_id=...`
+7. Webhook `checkout.session.completed` creates subscription
+
+### Customer Portal
+
+1. User visits `/billing`
+2. Click "Manage Billing" → `/api/stripe/portal`
+3. Create Portal Session for customer
+4. Redirect to Stripe Portal URL
+5. User can update card, cancel, etc.
+6. Webhook `customer.subscription.updated` syncs changes
+
+### Webhook Events
+
+| Event                           | Action                      |
+| ------------------------------- | --------------------------- |
+| `checkout.session.completed`    | Create subscription record  |
+| `customer.subscription.created` | Create/update subscription  |
+| `customer.subscription.updated` | Update subscription status  |
+| `customer.subscription.deleted` | Mark subscription canceled  |
+| `invoice.paid`                  | Update `current_period_end` |
+| `invoice.payment_failed`        | Set status `past_due`       |
+
+### Webhook Atomicity & Stale-Processing Recovery
+
+The webhook handler uses a two-step database transaction:
+
+1. **Claim**: `UPDATE webhook_events SET status = 'processing' WHERE stripe_event_id = $1 AND status = 'pending' RETURNING id` — if no row is returned, the event is already claimed; return 200 immediately.
+2. **Process + commit**: the subscription upsert and the status update to `processed` run inside the **same database transaction**. A crash cannot leave a permanently misleading `processing` row because the transaction rolls back.
+
+A stale `processing` row (worker crash before commit) is recovered by a scheduled job or manual query:
+
+```sql
+-- Reset events stuck in processing for more than 10 minutes
+UPDATE webhook_events
+SET status = 'pending', error_message = 'reset after stale processing'
+WHERE status = 'processing'
+  AND updated_at < NOW() - INTERVAL '10 minutes';
+```
+
+Add `updated_at` to `webhook_events` to enable this query (see `docs/schema.md`).
+
+## Entitlement Rules
+
+Entitlement policy is defined in `lib/config.ts` and enforced in `lib/entitlements.ts`. The **default policy** for this template is:
+
+| Status                             | Access Level                                                                           |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `active`, `trialing`               | Full access                                                                            |
+| `past_due`                         | **No access** (deny by default — change in `lib/config.ts` if you want a grace period) |
+| `canceled`, `unpaid`, `incomplete` | No access                                                                              |
+| No subscription                    | No access (deny by default)                                                            |
+
+To enable a grace period for `past_due`, set `BILLING_PAST_DUE_GRACE = true` in `lib/config.ts`. This is a **product decision**, not a default.
 
 ## Testing
 
-Run unit/integration tests and application-flow tests before merging. Run local Supabase RLS tests whenever Supabase is available. The core suite does not automate live Stripe-hosted Checkout; use the documented Stripe CLI/manual verification procedure before major billing changes or launch.
-
-## Stripe SDK
-
-Pin the Stripe SDK version in `package.json`. Record the configured Stripe API/webhook version in the project documentation and upgrade deliberately with webhook regression tests.
-
-## Future Organizations
-
-Core billing is user-owned. Organization billing is not a resolver-only change: it requires a schema migration, data migration, and RLS policy rewrite. Add a billing-owner abstraction as part of that future work rather than pretending the current `auth.users` foreign keys accept workspace IDs.
-
-## Project Structure
-
-### Current
-
-```text
-.
-├── docs/
-│   ├── implementation-plan.md            # Concise build order and acceptance gates
-│   ├── schema.md                         # Authoritative database contract
-│   ├── decisions.md                      # Architectural decisions and trade-offs
-│   ├── prompt-plan.md                    # Claude Code stage prompts
-├── CLAUDE.md                             # Claude Code conventions and constraints
-└── README.md                             # Setup, operations, and project guide
-
+```bash
+npm test
+npm run test:coverage
+npm test -- subscription.test.ts
 ```
 
-### Proposed
+### Test Coverage Targets
 
-```text
-.
-├── app/                                  # Next.js App Router
-│   ├── (marketing)/                      # Public pages
-│   │   ├── page.tsx                      # Landing page
-│   │   └── pricing/page.tsx              # Pricing page
-│   ├── (auth)/                           # Unauthenticated auth flows
-│   │   ├── login/page.tsx
-│   │   ├── signup/page.tsx
-│   │   ├── forgot-password/page.tsx      # Request recovery email
-│   │   └── reset-password/page.tsx       # Recovery callback and password update
-│   ├── (app)/                            # Authenticated application shell
-│   │   ├── layout.tsx                    # Session check and route protection
-│   │   ├── dashboard/page.tsx
-│   │   └── settings/
-│   │       ├── profile/page.tsx
-│   │       └── billing/page.tsx
-│   ├── api/
-│   │   ├── stripe/
-│   │   │   ├── checkout/route.ts         # Authenticated Checkout endpoint
-│   │   │   ├── portal/route.ts            # Authenticated Portal endpoint
-│   │   │   └── webhook/route.ts           # Signature-verified Stripe webhook
-│   │   ├── health/route.ts
-│   │   └── ...                            # Product-specific server routes
-│   ├── layout.tsx
-│   └── globals.css
-├── components/
-│   ├── ui/                               # Reusable UI primitives
-│   └── shared/                           # App-specific shared components
-├── lib/
-│   ├── supabase/
-│   │   ├── client.ts                     # Browser client; anon key only
-│   │   ├── server.ts                     # Request-authenticated server client
-│   │   └── admin.ts                      # Service-role client; server-only
-│   ├── billing/
-│   │   └── repository.ts                 # Narrow server-only billing DB operations
-│   ├── stripe/
-│   │   ├── client.ts                     # Stripe server SDK client
-│   │   ├── checkout.ts                   # Checkout session helpers
-│   │   ├── portal.ts                     # Portal session helpers
-│   │   └── webhook-handlers.ts           # Event-specific handlers
-│   ├── entitlements/
-│   │   ├── config.ts                     # Product/plan and feature configuration
-│   │   └── get-entitlements.ts           # Server-side entitlement resolution
-│   ├── env.ts                            # Validated environment configuration
-│   └── utils.ts
-├── modules/                              # Optional, product-driven modules
-│   ├── teams/
-│   ├── usage-billing/
-│   ├── storage/
-│   ├── email/
-│   ├── analytics/
-│   ├── error-tracking/
-│   ├── ai/
-│   └── jobs/
-├── supabase/
-│   ├── migrations/                       # Numbered SQL migrations
-│   └── config.toml                       # Local Supabase configuration
-├── tests/
-│   ├── unit/                             # Pure logic and mocked integrations
-│   ├── integration/                       # Route and repository integration tests
-│   ├── e2e/                              # Playwright application-flow tests
-│   └── setup.ts
-├── docs/
-│   ├── implementation-plan.md            # Concise build order and acceptance gates
-│   ├── schema.md                         # Authoritative database contract
-│   ├── decisions.md                      # Architectural decisions and trade-offs
-│   ├── prompt-plan.md                    # Claude Code stage prompts
-│   └── security-review.md                # Created during the security-review stage
-├── middleware.ts                         # Supabase session refresh
-├── .env.example                          # Environment-variable template
-├── CLAUDE.md                             # Claude Code conventions and constraints
-├── README.md                             # Setup, operations, and project guide
-├── package.json                          # Scripts and dependencies
-└── next.config.ts
+- Authentication flow: 100%
+- Webhook handlers: 90%
+- Entitlement logic: 100%
+- RLS policies: 80%
+
+## Environment Variables
+
+### Required
+
+| Variable                        | Description                         |
+| ------------------------------- | ----------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL                |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (client)          |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service role (server only) |
+| `STRIPE_SECRET_KEY`             | Stripe secret key (test or live)    |
+| `STRIPE_WEBHOOK_SECRET`         | Stripe webhook signing secret       |
+| `STRIPE_PRICE_ID_PRO`           | Stripe price ID for Pro plan        |
+| `STRIPE_API_VERSION`            | Pinned Stripe API version string    |
+| `NEXT_PUBLIC_APP_URL`           | App URL (for redirects)             |
+
+### Optional
+
+| Variable                  | Description               |
+| ------------------------- | ------------------------- |
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog analytics key     |
+| `SENTRY_DSN`              | Sentry error tracking DSN |
+| `RESEND_API_KEY`          | Resend email API key      |
+
+## Stripe SDK & API Version Pinning
+
+Pin **both** the SDK version in `package.json` and the API version in `.env.local`. They must be upgraded together:
+
+```json
+// package.json
+"stripe": "16.x"
 ```
+
+```bash
+# .env.local
+STRIPE_API_VERSION=2024-06-20
+```
+
+```typescript
+// lib/vendor/stripe/client.ts
+const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+  apiVersion: env.STRIPE_API_VERSION as Stripe.LatestApiVersion,
+});
+```
+
+**Upgrade Process:**
+
+1. Read Stripe changelog for the new version
+2. Update `stripe` version in `package.json` and run `npm install`
+3. Update `STRIPE_API_VERSION` in `.env.local`
+4. Run the full test suite (`npm test`)
+5. Test Checkout, Portal, and webhook flows manually
+6. Deploy
+
+## Optional Modules
+
+Modules are opt-in. **Note:** `workspaces` and `usage-billing` are not schema-neutral — they may require new foreign keys or a billing-owner relationship. Review `docs/decisions.md` before adding them.
+
+### Available Modules
+
+- `workspaces` — Multi-tenant teams (**requires schema additions**)
+- `usage-billing` — Metered usage + invoices (**requires schema additions**)
+- `storage` — Supabase Storage wrappers
+- `email` — Resend integration
+- `analytics` — PostHog client
+- `ai` — LLM API clients
+
+### Adding a Module
+
+```bash
+npm install <module-deps>
+npx supabase migration new add_<module>_tables
+import { init } from '@/lib/modules/<module>';
+init();
+```
+
+## Deployment Checklist
+
+- [ ] Environment variables set in Vercel
+- [ ] Supabase production project linked
+- [ ] Stripe live mode keys configured
+- [ ] Webhook endpoint updated to production URL
+- [ ] Custom domain configured (optional)
+- [ ] SSL certificate enabled (automatic on Vercel)
+- [ ] Database migrations pushed to production (`npx supabase db push`)
+- [ ] Test signup + checkout flow end-to-end
+
+## Troubleshooting
+
+### Supabase RLS Errors
+
+```sql
+-- Test RLS as an authenticated user
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" TO '{"sub": "<user-id>"}';
+SELECT * FROM profiles;
+```
+
+Service-role access bypasses RLS entirely and requires no policy — do not add `auth.uid() IS NULL` policies to simulate it.
+
+### Stripe Webhook Failures
+
+```bash
+# Check event log
+npx supabase table logs select --table webhook_events
+
+# Replay failed event via Stripe CLI
+stripe events resend <event-id>
+```
+
+### Vercel Build Errors
+
+```bash
+vercel logs <deployment-id>
+npm run build
+```
+
+## Contributing
+
+1. Fork repository
+2. Create feature branch (`git checkout -b feature/my-feature`)
+3. Commit changes (`git commit -am 'Add my feature'`)
+4. Push to branch (`git push origin feature/my-feature`)
+5. Create Pull Request
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+## Resources
+
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Stripe Documentation](https://stripe.com/docs)
+- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
+- [shadcn/ui Documentation](https://ui.shadcn.com)
+
+---
+
+**Built with ❤️ for solo founders**
