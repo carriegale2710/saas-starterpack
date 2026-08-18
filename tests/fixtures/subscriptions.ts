@@ -1,6 +1,16 @@
 /**
  * Typed subscription fixtures for all possible statuses.
  * Use these in tests instead of inline object literals.
+ *
+ * NOTE: The canonical status list is the `subscription_status` enum in
+ * supabase/migrations/0001_initial.sql and lib/database.types.ts.
+ * Do not add statuses here that are not in the DB enum — TypeScript will
+ * catch the mismatch at typecheck time.
+ *
+ * Stripe does expose a `paused` status but it is not in our schema enum
+ * because the project does not use Stripe's pause_collection feature.
+ * If you add it to the migration, regenerate lib/database.types.ts and
+ * add it back here.
  */
 import type { SubscriptionStatus } from '@/lib/database.types';
 
@@ -38,5 +48,4 @@ export const subscriptionFixtures: Record<SubscriptionStatus, MockSubscription> 
   unpaid: { ...base, status: 'unpaid' },
   incomplete: { ...base, status: 'incomplete' },
   incomplete_expired: { ...base, status: 'incomplete_expired' },
-  paused: { ...base, status: 'paused' },
 };

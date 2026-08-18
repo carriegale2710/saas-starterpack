@@ -52,7 +52,11 @@ describe('Checkout session contract', () => {
 // ---------------------------------------------------------------------------
 
 describe('Subscription status coverage', () => {
-  it('fixtures cover all possible subscription statuses', () => {
+  it('fixtures cover all DB subscription statuses', () => {
+    // These are the 7 statuses defined in the subscription_status enum
+    // in supabase/migrations/0001_initial.sql.
+    // NOTE: Stripe's `paused` status is intentionally excluded — see
+    // tests/fixtures/subscriptions.ts for explanation.
     const expectedStatuses = [
       'active',
       'trialing',
@@ -61,7 +65,6 @@ describe('Subscription status coverage', () => {
       'unpaid',
       'incomplete',
       'incomplete_expired',
-      'paused',
     ] as const;
 
     for (const status of expectedStatuses) {

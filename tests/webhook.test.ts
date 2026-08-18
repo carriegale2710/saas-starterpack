@@ -81,8 +81,7 @@ describe('Webhook event routing', () => {
 
   it('customer.subscription.deleted event sets status to canceled', () => {
     const event = webhookEventFixtures['customer.subscription.deleted'];
-    // @ts-expect-error — data.object is typed as plain object in fixtures
-    expect(event.data.object.status).toBe('canceled');
+    expect((event.data.object as { status: string }).status).toBe('canceled');
   });
 });
 
