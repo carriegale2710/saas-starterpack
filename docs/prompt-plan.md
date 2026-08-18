@@ -416,6 +416,10 @@ Use lib/ at the project root. Do not create src/lib/.
 - Keep the UI product-neutral
 - Avoid unnecessary client components
 - Do not add database, Stripe, email, analytics, or monitoring code yet
+- Add a `validate` script to package.json that runs: npm run lint && npm run typecheck && npm run test
+- Use these placeholder values in lib/config.ts: APP_NAME "SaaS Starter", APP_URL from NEXT_PUBLIC_APP_URL env, SUPPORT_EMAIL "support@example.com"
+- Scaffold these shadcn/ui components only: Button, Card, Input, Label, Badge, Separator, Avatar, DropdownMenu
+- Do not create src/ directory at all — all application code lives at root lib/, app/, components/
 
 ## Verification
 
