@@ -64,9 +64,97 @@ Pin the Stripe SDK version in `package.json`. Record the configured Stripe API/w
 
 Core billing is user-owned. Organization billing is not a resolver-only change: it requires a schema migration, data migration, and RLS policy rewrite. Add a billing-owner abstraction as part of that future work rather than pretending the current `auth.users` foreign keys accept workspace IDs.
 
-## Source of Truth
+## Project Structure
 
-- Stable database contract: `docs/schema.md`
-- Architectural decisions: `docs/decisions.md`
-- Coding and agent conventions: `CLAUDE.md`
-- Product-agnostic implementation guidance: this README
+### Current
+
+```text
+.
+├── docs/
+│   ├── implementation-plan.md            # Concise build order and acceptance gates
+│   ├── schema.md                         # Authoritative database contract
+│   ├── decisions.md                      # Architectural decisions and trade-offs
+│   ├── prompt-plan.md                    # Claude Code stage prompts
+├── CLAUDE.md                             # Claude Code conventions and constraints
+└── README.md                             # Setup, operations, and project guide
+
+```
+
+### Proposed
+
+```text
+.
+├── app/                                  # Next.js App Router
+│   ├── (marketing)/                      # Public pages
+│   │   ├── page.tsx                      # Landing page
+│   │   └── pricing/page.tsx              # Pricing page
+│   ├── (auth)/                           # Unauthenticated auth flows
+│   │   ├── login/page.tsx
+│   │   ├── signup/page.tsx
+│   │   ├── forgot-password/page.tsx      # Request recovery email
+│   │   └── reset-password/page.tsx       # Recovery callback and password update
+│   ├── (app)/                            # Authenticated application shell
+│   │   ├── layout.tsx                    # Session check and route protection
+│   │   ├── dashboard/page.tsx
+│   │   └── settings/
+│   │       ├── profile/page.tsx
+│   │       └── billing/page.tsx
+│   ├── api/
+│   │   ├── stripe/
+│   │   │   ├── checkout/route.ts         # Authenticated Checkout endpoint
+│   │   │   ├── portal/route.ts            # Authenticated Portal endpoint
+│   │   │   └── webhook/route.ts           # Signature-verified Stripe webhook
+│   │   ├── health/route.ts
+│   │   └── ...                            # Product-specific server routes
+│   ├── layout.tsx
+│   └── globals.css
+├── components/
+│   ├── ui/                               # Reusable UI primitives
+│   └── shared/                           # App-specific shared components
+├── lib/
+│   ├── supabase/
+│   │   ├── client.ts                     # Browser client; anon key only
+│   │   ├── server.ts                     # Request-authenticated server client
+│   │   └── admin.ts                      # Service-role client; server-only
+│   ├── billing/
+│   │   └── repository.ts                 # Narrow server-only billing DB operations
+│   ├── stripe/
+│   │   ├── client.ts                     # Stripe server SDK client
+│   │   ├── checkout.ts                   # Checkout session helpers
+│   │   ├── portal.ts                     # Portal session helpers
+│   │   └── webhook-handlers.ts           # Event-specific handlers
+│   ├── entitlements/
+│   │   ├── config.ts                     # Product/plan and feature configuration
+│   │   └── get-entitlements.ts           # Server-side entitlement resolution
+│   ├── env.ts                            # Validated environment configuration
+│   └── utils.ts
+├── modules/                              # Optional, product-driven modules
+│   ├── teams/
+│   ├── usage-billing/
+│   ├── storage/
+│   ├── email/
+│   ├── analytics/
+│   ├── error-tracking/
+│   ├── ai/
+│   └── jobs/
+├── supabase/
+│   ├── migrations/                       # Numbered SQL migrations
+│   └── config.toml                       # Local Supabase configuration
+├── tests/
+│   ├── unit/                             # Pure logic and mocked integrations
+│   ├── integration/                       # Route and repository integration tests
+│   ├── e2e/                              # Playwright application-flow tests
+│   └── setup.ts
+├── docs/
+│   ├── implementation-plan.md            # Concise build order and acceptance gates
+│   ├── schema.md                         # Authoritative database contract
+│   ├── decisions.md                      # Architectural decisions and trade-offs
+│   ├── prompt-plan.md                    # Claude Code stage prompts
+│   └── security-review.md                # Created during the security-review stage
+├── middleware.ts                         # Supabase session refresh
+├── .env.example                          # Environment-variable template
+├── CLAUDE.md                             # Claude Code conventions and constraints
+├── README.md                             # Setup, operations, and project guide
+├── package.json                          # Scripts and dependencies
+└── next.config.ts
+```
