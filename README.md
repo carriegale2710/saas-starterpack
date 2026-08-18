@@ -129,6 +129,22 @@ vercel
 vercel --prod
 ```
 
+## App Routes
+
+| Route            | File                                                         |
+| ---------------- | ------------------------------------------------------------ |
+| /                | app/(marketing)/page.tsx                                     |
+| /pricing         | app/(marketing)/pricing/page.tsx                             |
+| /login           | app/(auth)/login/page.tsx                                    |
+| /signup          | app/(auth)/signup/page.tsx                                   |
+| /forgot-password | app/(auth)/forgot-password/page.tsx                          |
+| /reset-password  | app/(auth)/reset-password/page.tsx                           |
+| /dashboard       | app/(dashboard)/dashboard/page.tsx + loading.tsx + error.tsx |
+| /profile         | app/(dashboard)/profile/page.tsx                             |
+| /billing         | app/(dashboard)/billing/page.tsx                             |
+| 404              | app/not-found.tsx                                            |
+| Global error     | app/error.tsx                                                |
+
 ## Database Schema
 
 See [`docs/schema.md`](docs/schema.md) for complete schema definition and the initial migration at `supabase/migrations/0001_initial.sql`.
