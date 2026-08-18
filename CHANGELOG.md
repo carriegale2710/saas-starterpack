@@ -11,6 +11,28 @@ _Nothing yet — Phase 2 (Stripe) work begins next._
 
 ---
 
+## [0.1.1] — 2026-08-19
+
+Pre-Phase-2 cleanup and test scaffolding. No functional changes.
+
+### Added
+- `tests/fixtures/subscriptions.ts` — typed `MockSubscription` fixtures for all 8 subscription statuses; keyed as `Record<SubscriptionStatus, MockSubscription>` so TypeScript catches missing statuses
+- `tests/fixtures/webhook-events.ts` — plain-object Stripe event payloads for all 5 entitlement-controlling events + `ignoredEventFixtures` (events the handler must swallow without crashing)
+- `tests/webhook.test.ts` — skeleton test suite: idempotency logic, event routing contracts, stale-processing recovery threshold; commented assertions activate as Phase 2 handler is implemented
+- `tests/billing.test.ts` — skeleton test suite: checkout session contract (metadata, mode, redirect URL), subscription fixture coverage, `BILLING_CONFIG` policy assertions
+
+### Changed
+- `.github/workflows/ci.yml` — restructured from 1 job to 3 parallel jobs:
+  - `validate` (lint + typecheck, ~30s) runs first
+  - `build` (Next.js build) and `test` (vitest + coverage) run in parallel after validate
+  - Shared `env:` block at workflow level — no duplication across jobs
+  - `npm run build` now runs in CI, catching Next.js build errors that typecheck alone misses
+- `tests/README.md` — updated with fixture documentation, CI job diagram, skeleton test conventions
+- `README.md` — Node.js version corrected to 22 LTS; Next.js version corrected to 15; Stripe features correctly marked as Phase 2; env vars table split by phase; `BILLING_PAST_DUE_GRACE` reference corrected to `BILLING_CONFIG.pastDueGracePeriod`
+- `CLAUDE.md` — synced with new conventions: Node 22, `database.types.ts` regeneration rule, nav in `lib/config.ts` (ADR-14), `tests/setup.ts` sync rule (ADR-15), CI workflow documented, actual test file list updated
+
+---
+
 ## [0.1.0] — 2026-08-19
 
 Phase 1 complete. Foundation is stable, all tests passing, CI green.
