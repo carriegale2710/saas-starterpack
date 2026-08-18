@@ -24,12 +24,18 @@ Later stages must read the relevant split documents and update all affected file
 
 ---
 
+## Package Manager
+
+This project uses **npm** exclusively. npm comes pre-installed with Node.js and requires no additional setup. All commands in this document use `npm`. Do not switch to pnpm or yarn — it would introduce a lockfile mismatch.
+
+---
+
 ## Tool assignment by stage
 
 | Stage                 | Perplexity Pro                       | Claude Free                         | Local tools                          |
 | --------------------- | ------------------------------------ | ----------------------------------- | ------------------------------------ |
 | Architecture plan     | Draft architecture, research vendors | —                                   | Review docs in VS Code               |
-| Foundation            | Verify current Next.js/pnpm guidance | Scaffold app, config, shell, layout | `pnpm dev`, lint, build              |
+| Foundation            | Verify current Next.js/npm guidance  | Scaffold app, config, shell, layout | `npm run dev`, lint, build           |
 | Supabase auth/RLS     | Check SSR approach, current SDK docs | Implement auth, migrations, RLS     | `supabase db reset`, type-gen, tests |
 | Stripe billing        | Verify webhook events, SDK version   | Implement billing, webhooks, gates  | `stripe listen`, Vitest              |
 | Optional integrations | Research module setup if needed      | Implement selected modules only     | Env toggle test, build               |
@@ -53,15 +59,13 @@ For every stage, follow this loop:
 
 ## Claude Free: how to keep sessions bounded
 
-Claude Free has a context limit. Stay within it by:
+- Paste only the relevant section of `docs/implementation-plan.md`, not the whole file
+- Give the schema excerpt, not all of `docs/schema.md`
+- Ask for one stage at a time — never combine stages
+- Paste failing test output verbatim rather than describing it
+- Start a new session for each stage
 
-- Pasting only the relevant section of `docs/implementation-plan.md`, not the whole file
-- Giving the schema excerpt, not all of `docs/schema.md`
-- Asking for one stage at a time — never combine stages
-- Pasting failing test output verbatim rather than describing it
-- Starting a new session for each stage
-
-If Claude Free hits its limit mid-stage, split the remaining work into a second prompt and start fresh. Never try to recover a broken context — it wastes time.
+If Claude Free hits its limit mid-stage, split the remaining work into a second prompt and start fresh.
 
 ---
 
@@ -75,13 +79,9 @@ Use Perplexity Pro before returning to Claude Free when:
 - A test failure involves an external API contract
 - A security question arises that Claude Free cannot reliably answer from code alone
 
-Perplexity Pro is your source of truth for current external APIs. Claude Free is your source of truth for the code you already have.
-
 ---
 
 ## When Claude Pro becomes worth it
-
-Consider upgrading Claude Free to Claude Pro when at least one of these becomes true:
 
 - Claude Free repeatedly hits limits in a single implementation stage
 - You spend more time reconstructing context than writing code
@@ -89,7 +89,7 @@ Consider upgrading Claude Free to Claude Pro when at least one of these becomes 
 - You want Claude Code to inspect, edit, test, and iterate in one workflow
 - You are actively shipping multiple SaaS products every week
 
-> Complete Stage 2 with the current combination first. If free-tier limits materially slow you down during Stage 3 or Stage 4, buy Claude Pro for one month and reassess — do not treat it as a permanent expense.
+> Complete Stage 2 with the current combination first. If free-tier limits materially slow you down during Stage 3 or Stage 4, buy Claude Pro for one month and reassess.
 
 ---
 
@@ -131,11 +131,9 @@ cd my-saas-template
 git init
 ```
 
-Do not create the Next.js app yet. Let Claude Free inspect the empty repository and propose the structure after Stage 1 docs are written by Perplexity Pro.
-
 ### Step 2: Run Perplexity Pro first (Stage 1)
 
-Use Perplexity Pro to draft the architecture documentation. Paste the Stage 1 prompt directly into Perplexity Pro. Save the output to `docs/`. Do not open a Claude Free session until `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md` exist and are reviewed.
+Use Perplexity Pro to draft the architecture documentation. Save the output to `docs/`. Do not open a Claude Free session until `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md` exist and are reviewed.
 
 ---
 
@@ -244,12 +242,18 @@ Refer to `docs/stage1-version-comparison.md` for notes on what changed and why t
 
 After Stage 1 is done, review and correct before any application code is written:
 
-- Atomic webhook claim using `INSERT ... ON CONFLICT DO NOTHING`
+- Atomic webhook claim using `UPDATE ... WHERE status = 'pending' RETURNING id`
+- Subscription upsert and status update wrapped in a single database transaction
+- Stale-processing recovery query documented in README
 - Explicit `processing`, `processed`, `failed` states with safe retry semantics
 - `invoice.paid` in the entitlement-controlling event set
-- Service-role used only in the webhook route and a server-only billing repository
-- Password-recovery request and callback flows
-- `updated_at`, constraints, and unknown-status handling on mutable records
+- `past_due` policy defined in `lib/config.ts` (default: deny)
+- Service-role described as bypassing RLS — no `auth.uid() IS NULL` policies
+- `webhook_events` used consistently — never `stripe_events`
+- `lib/` used consistently — never `src/lib/`
+- Stripe SDK version pinned in `package.json` alongside `STRIPE_API_VERSION`
+- `supabase/migrations/0001_initial.sql` listed as a Stage 3 deliverable
+- Module schema-impact warnings for `workspaces` and `usage-billing`
 - Documentation split into `docs/implementation-plan.md`, `docs/schema.md`, `docs/decisions.md`, `README.md`, `CLAUDE.md`
 
 Commit the checkpoint:
@@ -265,7 +269,7 @@ git commit -m "stage 1: architecture plan"
 
 **Claude Free stage.**
 
-Before opening Claude Free, use Perplexity Pro to confirm the current Next.js App Router setup approach, shadcn/ui initialization, and pnpm conventions. Update `docs/decisions.md` if anything has changed.
+Before opening Claude Free, use Perplexity Pro to confirm the current Next.js App Router setup approach and npm conventions.
 
 ### Claude Free prompt
 
@@ -273,11 +277,10 @@ Before opening Claude Free, use Perplexity Pro to confirm the current Next.js Ap
 Implement the foundation phase from `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
 
 Before editing:
-
 1. Read `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
 2. Inspect the current repository.
 3. Read any existing `CLAUDE.md`.
-4. Confirm the files and dependencies that are in scope.
+4. Confirm the files and dependencies in scope.
 5. Do not implement optional modules.
 
 ## Implement
@@ -287,8 +290,8 @@ Before editing:
 - Tailwind CSS
 - shadcn/ui-style base components
 - ESLint and formatting
-- Central product configuration
-- Typed environment-variable validation
+- Central product configuration (`lib/config.ts` including `BILLING_CONFIG.pastDueGracePeriod`)
+- Typed environment-variable validation (`lib/env.ts`)
 - Public marketing page
 - Reusable application shell
 - Dashboard layout
@@ -297,11 +300,12 @@ Before editing:
 - README foundation
 - Initial `CLAUDE.md`
 
-Use pnpm unless a package manager is already configured.
+Use npm. Do not use pnpm or yarn.
 
 ## Constraints
 
-- Keep all product names, URLs, branding, and feature flags centralized
+- Use `lib/` at the project root — never `src/lib/`
+- Keep all product names, URLs, branding, and feature flags centralized in `lib/config.ts`
 - Do not hard-code product-specific values
 - Keep the UI product-neutral
 - Avoid unnecessary client components
@@ -311,16 +315,14 @@ Use pnpm unless a package manager is already configured.
 
 Run formatting, lint, type checking, and a production build. Fix errors caused by your changes.
 
-At the end, report: files created or changed, commands run, assumptions, known limitations, and recommended next phase.
-
-Stop when the foundation acceptance criteria pass.
+Report: files created or changed, commands run, assumptions, known limitations, and recommended next phase.
 ```
 
 ### Local verification
 
 ```bash
-pnpm dev
-pnpm build
+npm run dev
+npm run build
 ```
 
 ### Checkpoint
@@ -336,7 +338,7 @@ git commit -m "stage 2: project foundation"
 
 **Claude Free stage.**
 
-Before opening Claude Free, use Perplexity Pro to verify the current `@supabase/ssr` approach for Next.js App Router — the SSR helpers changed and Claude Free may have outdated training data on this.
+Before opening Claude Free, use Perplexity Pro to verify the current `@supabase/ssr` approach for Next.js App Router.
 
 ### Claude Free prompt
 
@@ -344,12 +346,11 @@ Before opening Claude Free, use Perplexity Pro to verify the current `@supabase/
 Implement the Supabase authentication and database foundation described in the approved plan.
 
 Before editing:
-
 1. Read `CLAUDE.md`.
 2. Read `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
 3. Inspect the existing application structure.
 4. Inspect the current Next.js and Supabase package versions.
-5. Follow the current `@supabase/ssr` approach for Next.js — do not use deprecated helpers.
+5. Follow the current `@supabase/ssr` approach — do not use deprecated helpers.
 
 ## Implement
 
@@ -363,7 +364,9 @@ Before editing:
 - Account settings foundation
 
 Database migrations:
-- profiles with UUID keys, foreign keys, timestamps, indexes, updated-at handling, RLS policies
+- **Generate `supabase/migrations/0001_initial.sql`** containing all DDL from `docs/schema.md`: profiles, subscriptions, webhook_events tables; all types, triggers, indexes, constraints, and RLS policies
+- webhook_events must include `updated_at` (required for stale-processing recovery)
+- Do NOT add an `auth.uid() IS NULL` policy to webhook_events — the table has no authenticated-user policies; service-role bypasses RLS unconditionally
 
 Generate TypeScript database types.
 
@@ -378,28 +381,24 @@ Generate TypeScript database types.
 
 ## Verification
 
-Add tests for: environment validation, auth input schemas, protected-route behavior, profile authorization.
-
 Run: Supabase migration validation, type generation, lint, type checking, unit tests, production build.
 
 Update README, `docs/schema.md`, and `CLAUDE.md` if new conventions are introduced.
-
-Stop when authentication works locally or when the exact external setup limitation is documented.
 ```
 
 ### Local verification
 
 ```bash
-supabase db reset
-supabase gen types typescript --local > src/lib/database.types.ts
-pnpm test
+npx supabase db reset
+npx supabase gen types typescript --local > lib/database.types.ts
+npm test
 ```
 
 Manual checks:
 
 - Sign up, log in, log out, reset password
-- Access `/dashboard` while logged out
-- Access `/dashboard` while logged in
+- Access `/dashboard` while logged out → redirect to login
+- Access `/dashboard` while logged in → dashboard renders
 - Confirm a user cannot access another user's profile
 
 ### Checkpoint
@@ -413,317 +412,32 @@ git commit -m "stage 3: Supabase authentication"
 
 ## Stage 4: Stripe billing
 
-**Claude Free stage, with Perplexity Pro used to verify webhook events and SDK version first.**
+**Claude Free stage.**
 
-Stripe billing is high-risk. Before opening Claude Free:
-
-- Use Perplexity Pro to confirm the current Stripe Node SDK version, API version, and the full set of subscription lifecycle events
-- Verify the atomic webhook claim pattern
-- Confirm the `invoice.paid` entitlement requirement
+Before opening Claude Free, use Perplexity Pro to verify current webhook event names, the current stable Stripe Node SDK major version, and confirm the pinned API version string.
 
 ### Claude Free prompt
 
 ```text
-Implement the Stripe subscription module from the approved architecture plan.
+Implement Stripe billing as described in the approved plan.
 
 Before editing:
-
-1. Read `CLAUDE.md`, `docs/implementation-plan.md`, and `docs/schema.md`.
-2. Inspect the existing Supabase clients and database types.
-3. Inspect the current Stripe SDK version.
-4. Confirm the existing user and profile schema.
-5. Do not redesign unrelated parts of the application.
+1. Read `CLAUDE.md`.
+2. Read `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
+3. Inspect existing application structure and current package versions.
 
 ## Implement
 
-Stripe modules:
-- Stripe server client
-- Product and price configuration
-- Checkout session creation
-- Customer Portal session creation
-- Webhook parsing and handling
-- Subscription-to-entitlement mapping
-- Billing authorization helpers
-
-Database migrations:
-- customers, subscriptions, webhook_events
-
-Pages and routes:
-- Pricing page using central plan configuration
-- Checkout action
-- Customer Portal action
-- Billing settings page
-- Current subscription display
-
-Reusable entitlement API:
-- `getCurrentSubscription()`
-- `getCurrentEntitlements()`
-- `hasEntitlement(name)`
-- `requireEntitlement(name)`
-
-## Webhook requirements
-
-The webhook endpoint must:
-- Verify the Stripe signature
-- Reject invalid signatures
-- Be idempotent using `INSERT ... ON CONFLICT DO NOTHING`
-- Record processing/processed/failed states
-- Use the service-role client only on the server
-- Handle: checkout.session.completed, customer.subscription.created/updated/deleted, invoice.paid, invoice.payment_failed
-- Handle: active, trialing, past_due, unpaid, incomplete, canceled, paused
-- Never trust client-provided plan or subscription status
-- Never grant access solely because a user returns from Checkout
-
-## Testing
-
-Unit tests for: invalid signatures, duplicate events, subscription status mapping, entitlement mapping, checkout authorization, customer ownership, access behavior for active/canceled/past-due subscriptions.
-
-Mock Stripe and Supabase — do not require production credentials.
-
-## Verification
-
-Run lint, type checking, unit tests, and production build.
-
-Document: Stripe dashboard setup, price ID configuration, Stripe CLI testing, test card instructions, webhook event configuration.
-
-Stop when the billing acceptance criteria pass.
-```
-
-### Local verification
-
-```bash
-stripe listen --forward-to localhost:3000/api/stripe/webhook
-pnpm test
-```
-
-Manual checks:
-
-- Checkout, successful subscription, Customer Portal
-- Webhook delivery and duplicate delivery
-- Cancellation and payment failure
-
-### Checkpoint
-
-```bash
-git add .
-git commit -m "stage 4: Stripe billing"
-```
-
----
-
-## Stage 5: Optional integrations
-
-**Claude Free stage.** Use Perplexity Pro first to check current setup docs for any module you are adding (especially Resend, PostHog, or Sentry, which change their SDK APIs frequently).
-
-### Claude Free prompt
-
-```text
-Implement only the following optional modules: [choose: Resend / PostHog / Sentry / Supabase Storage / Workspaces / Usage-based billing / Background jobs]
-
-Before editing:
-
-1. Read `CLAUDE.md`.
-2. Read `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
-3. Inspect current integration patterns.
-4. Do not implement unselected modules.
-
-For each selected module:
-- Isolate vendor-specific code in `src/lib/<module>`
-- Disable when its environment variables are absent
-- Add typed configuration
-- Add a small adapter API
-- Avoid exposing secrets to browser code
-- Add tests for enabled and disabled behavior
-- Document setup and removal instructions
-- Keep the core application functional when the module is disabled
-
-Run lint, type checking, tests, and build. Update README and CLAUDE.md.
-```
-
-### Local verification
-
-Remove optional env vars and confirm the app still builds and runs.
-
-### Checkpoint
-
-```bash
-git add .
-git commit -m "stage 5: optional integrations"
-```
-
----
-
-## Stage 6: Testing and documentation
-
-**Perplexity Pro first, then Claude Free.**
-
-Use Perplexity Pro to audit the documentation for accuracy — check that Supabase type-gen commands, Stripe CLI commands, and Vercel deployment steps are current. Paste corrections into `docs/` before giving Claude Free the stage prompt.
-
-### Claude Free prompt
-
-```text
-Audit and complete the testing and documentation for the reusable SaaS starter.
-
-Do not add new product features.
-
-## Test coverage
-
-Add or improve tests for:
-- Environment validation
-- Authentication input validation
-- Protected routes
-- Profile authorization
-- RLS-sensitive access
-- Stripe webhook signature validation
-- Webhook idempotency
-- Subscription status mapping
-- Entitlement checks
-- Checkout authorization
-- Optional integrations being safely disabled
-
-Add Playwright tests for:
-- Public homepage
-- Signup and login navigation
-- Unauthenticated dashboard access
-- Authenticated dashboard access
-- Pricing page
-- Billing page
-
-Do not make tests depend on production Supabase or Stripe.
-
-## Documentation
-
-Ensure the following are accurate:
-- README.md
-- CLAUDE.md
-- docs/implementation-plan.md
-- docs/schema.md
-- docs/decisions.md
-
-The documentation must explain: local setup, environment variables, Supabase setup, migrations, type generation, Stripe setup, Stripe CLI webhooks, Vercel deployment, product rebranding, adding a feature, adding a gated feature, adding a plan, disabling billing, removing optional modules, running all checks.
-
-Use commands that actually exist in `package.json`.
-
-## Verification
-
-Run: formatting, lint, type checking, unit tests, Playwright tests where possible, production build. Fix documentation that references missing commands or files.
-```
-
-### Checkpoint
-
-```bash
-git add .
-git commit -m "stage 6: testing and documentation"
-```
-
----
-
-## Stage 7: Security review
-
-**Perplexity Pro for the audit brief, Claude Free to apply confirmed fixes.**
-
-Use Perplexity Pro to produce the security audit independently — it can research current OWASP guidance, Supabase RLS edge cases, and Stripe webhook security without relying on its training data. Bring the Perplexity Pro findings to Claude Free as a structured fix list.
-
-### Perplexity Pro security audit prompt
-
-```text
-Perform an independent security and correctness review of a Next.js + Supabase + Stripe SaaS starter.
-
-Review these areas:
-
-Authentication: session handling, protected routes, cross-user data access, password reset flows, correct Supabase client usage.
-
-Authorization: server-side checks, user IDs from session not client, entitlement checks on server, client bypass paths.
-
-Supabase: service-role key isolation, RLS enabled and restrictive, constraints and indexes, privileged operation isolation.
-
-Stripe: webhook signature verification, idempotency, billing state from Stripe events only, checkout metadata ownership, cancellation and payment-failure handling, client manipulation of price IDs or entitlements.
-
-Application security: input validation, safe redirects, error messages not leaking secrets, logs free of tokens, rate-sensitive endpoints.
-
-Maintainability: product-neutral template, removable optional modules, clear separation of responsibilities.
-
-Produce findings ranked critical, high, medium, low, or informational with file references, why each issue matters, the smallest safe fix, and remaining risks.
-```
-
-### Claude Free prompt (after Perplexity Pro review)
-
-```text
-Apply the following security fixes confirmed by independent review. Do not rewrite the application wholesale. Make only the listed fixes.
-
-[Paste Perplexity Pro findings here — critical and high issues only]
-
-After fixes run lint, type checking, unit tests, Playwright tests, and production build. Review the final git diff and summarize all changes.
-
-Create `docs/security-review.md` documenting findings, fixes applied, and remaining risks.
-```
-
-### Checkpoint
-
-```bash
-git add .
-git commit -m "stage 7: security review"
-```
-
----
-
-## Stage 8: Final validation
-
-**Claude Free stage.** The test suite is the source of truth here — local tools confirm the result.
-
-### Claude Free prompt
-
-```text
-Perform a final release-readiness check for this reusable SaaS template.
-
-Do not add features.
-
-Verify:
-1. Install dependencies from the lockfile in a clean environment
-2. Copy `.env.example` to `.env.local`
-3. Confirm required and optional environment variables are documented
-4. Run the development server
-5. Run lint, type checking, unit tests, Playwright tests, and production build
-6. Inspect the repository for secrets, temporary files, broken links, product-specific leftovers
-7. Confirm optional modules can remain disabled
-8. Confirm README commands match actual scripts
-9. Confirm `CLAUDE.md` accurately describes the project
-
-## Acceptance criteria
-
-- Installs from a clean checkout
-- Starts with documented environment variables
-- Public page loads
-- Unauthenticated users cannot access protected pages
-- Authentication works with local Supabase
-- Stripe webhook handling is signature-verified and idempotent
-- Entitlements checked server-side
-- No secrets committed or exposed to browser bundles
-- Rebrandable through central configuration
-- No product-specific business logic in the template
-- Core application works with optional integrations disabled
-
-Fix only issues required to meet these criteria.
-
-Report: final validation results, remaining manual setup steps, known limitations, and a recommended tag name such as `v0.1.0-template`.
-```
-
-### Local verification
-
-```bash
-git stash
-git clone . ../clean-test && cd ../clean-test
-pnpm install --frozen-lockfile
-cp .env.example .env.local
-pnpm dev
-pnpm test
-pnpm build
-```
-
-### Final commit and tag
-
-```bash
-git add .
-git commit -m "stage 8: final validation"
-git tag v0.1.0-template
+- Stripe SDK initialized from `lib/vendor/stripe/client.ts` using the validated `env` object
+- Pin stripe SDK version in package.json (confirm correct major version with Perplexity before proceeding)
+- `/api/stripe/checkout` — Checkout Session creation with user_id metadata
+- `/api/stripe/portal` — Portal Session creation
+- `/api/stripe/webhook`:
+  - Verify signature with `stripe.webhooks.constructEvent()`
+  - Atomic claim: UPDATE webhook_events WHERE status = 'pending' RETURNING id
+  - Process subscription upsert + mark processed INSIDE A SINGLE DATABASE TRANSACTION
+  - Handle checkout.session.completed, customer.subscription.*, invoice.paid, invoice.payment_failed
+  - Log unknown event types without crashing
+- `lib/entitlements.ts` reading `BILLING_CONFIG.pastDueGracePeriod` from `lib/config.ts`
+-
 ```

@@ -16,6 +16,7 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 - **Supabase Auth** (email/password + OAuth)
 - **Stripe** (Checkout, Customer Portal, Webhooks)
 - **Vercel** for deployment
+- **npm** — do not switch to pnpm or yarn; npm is pre-installed with Node and avoids lockfile conflicts
 
 ---
 
@@ -23,53 +24,61 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 
 ### 1. Directory Structure
 
-```
+```text
 /
 ├── app/
-│   ├── (marketing)/      # Public pages (/, /pricing, /about)
-│   ├── (auth)/           # Auth pages (/login, /signup, /forgot-password)
-│   ├── (dashboard)/      # Protected pages (/dashboard, /profile, /billing)
-│   ├── api/
-│   │   ├── stripe/
-│   │   │   ├── checkout/route.ts
-│   │   │   ├── portal/route.ts
-│   │   │   └── webhook/route.ts
-│   │   └── auth/
-│   │       └── callback/route.ts
-│   ├── layout.tsx
-│   └── globals.css
+│ ├── (marketing)/ # Public pages (/, /pricing, /about)
+│ ├── (auth)/ # Auth pages (/login, /signup, /forgot-password)
+│ ├── (dashboard)/ # Protected pages (/dashboard, /profile, /billing)
+│ ├── api/
+│ │ ├── stripe/
+│ │ │ ├── checkout/route.ts
+│ │ │ ├── portal/route.ts
+│ │ │ └── webhook/route.ts
+│ │ └── auth/
+│ │ └── callback/route.ts
+│ ├── layout.tsx
+│ └── globals.css
 ├── components/
-│   ├── ui/               # shadcn/ui-style components
-│   ├── marketing/        # Public page components
-│   ├── dashboard/        # Protected page components
-│   └── shared/           # Shared components (nav, footer)
-├── lib/
-│   ├── vendor/
-│   │   ├── supabase/
-│   │   │   ├── client.ts
-│   │   │   ├── server.ts
-│   │   │   └── rls.ts
-│   │   └── stripe/
-│   │       ├── client.ts
-│   │       ├── checkout.ts
-│   │       ├── portal.ts
-│   │       └── webhook.ts
-│   ├── modules/          # Optional modules (opt-in)
-│   ├── config.ts         # Central product configuration
-│   ├── env.ts            # Environment validation (Zod)
-│   └── entitlements.ts   # Subscription entitlement logic
+│ ├── ui/ # shadcn/ui-style components
+│ ├── marketing/ # Public page components
+│ ├── dashboard/ # Protected page components
+│ └── shared/ # Shared components (nav, footer)
+├── lib/ # Canonical path — do NOT use src/lib/
+│ ├── vendor/
+│ │ ├── supabase/
+│ │ │ ├── client.ts
+│ │ │ ├── server.ts
+│ │ │ └── rls.ts
+│ │ └── stripe/
+│ │ ├── client.ts
+│ │ ├── checkout.ts
+│ │ ├── portal.ts
+│ │ └── webhook.ts
+│ ├── modules/ # Optional modules (opt-in)
+│ ├── config.ts # Central product configuration (includes billing policy)
+│ ├── env.ts # Environment validation (Zod)
+│ └── entitlements.ts # Subscription entitlement logic
+├── supabase/
+│ └── migrations/
+│ └── 0001_initial.sql # Initial migration — must exist before Stage 3
 ├── docs/
-│   ├── implementation-plan.md
-│   ├── schema.md
-│   └── decisions.md
+│ ├── implementation-plan.md
+│ ├── schema.md
+│ └── decisions.md
 ├── tests/
-│   ├── entitlements.test.ts
-│   ├── webhook.test.ts
-│   └── rls.test.ts
+│ ├── entitlements.test.ts
+│ ├── webhook.test.ts
+│ └── rls.test.ts
 ├── .env.example
 ├── README.md
 └── CLAUDE.md
 ```
+
+**Naming rules:**
+
+- Use `lib/` at the project root. Never use `src/lib/` or mix the two.
+- The webhook event log table is named `webhook_events` everywhere — in SQL, code, and docs. Never use `stripe_events`.
 
 ### 2. Security Constraints
 
@@ -80,7 +89,6 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 ```typescript
 // ✅ CORRECT: Server-side only (api/routes)
 import { createClient } from "@supabase/supabase-js";
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY, // Server-only
@@ -88,16 +96,15 @@ const supabase = createClient(
 
 // ✅ CORRECT: Client-side (components, pages)
 import { createBrowserClient } from "@supabase/ssr";
-
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, // Anon key only
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 );
 ```
 
 #### Row Level Security
 
-All database tables **MUST** have RLS enabled. Default policy: **deny all**, then explicitly allow user access.
+All database tables **MUST** have RLS enabled. Default policy: **deny all**, then explicitly allow.
 
 ```sql
 -- ✅ CORRECT: Explicit user access
@@ -105,9 +112,11 @@ CREATE POLICY "Users can read own profile"
   ON profiles FOR SELECT
   USING (auth.uid() = id);
 
--- ❌ WRONG: No RLS policy (data exposed)
+-- ❌ WRONG: Never disable RLS
 -- ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
 ```
+
+**Service-role access bypasses RLS entirely.** It does not need a policy and must not be simulated with an `auth.uid() IS NULL` policy. Privileged tables such as `webhook_events` must have **no authenticated-user policies** — the absence of a matching policy is the access control.
 
 #### Stripe Webhooks
 
@@ -116,7 +125,34 @@ CREATE POLICY "Users can read own profile"
 - Validate webhook signatures with `stripe.webhooks.constructEvent()`
 - Log all events to `webhook_events` table (idempotency)
 
-### 3. Scope Boundaries
+#### Webhook Transaction Boundary
+
+The event state update (`status = 'processed'`) and the subscription upsert **must execute in the same database transaction**. A crash must never leave a permanently misleading `processing` row. Use a transaction wrapper:
+
+```typescript
+// lib/vendor/supabase/server.ts — inside webhook handler
+await supabase.rpc("process_webhook_event", { event_id, subscription_data });
+// The RPC wraps both the upsert and status update in a single transaction.
+```
+
+Stale `processing` rows (worker crash before commit) are recovered by resetting them after a timeout — see README for the recovery query. Add `updated_at` to `webhook_events` to support this.
+
+### 3. Entitlement Policy
+
+The `past_due` access decision is a **product decision** defined in `lib/config.ts`:
+
+```typescript
+// lib/config.ts
+export const BILLING_CONFIG = {
+  // Default: deny access on past_due. Set to true only if you deliberately
+  // want a grace period (e.g., read-only access while Stripe retries payment).
+  pastDueGracePeriod: false,
+} as const;
+```
+
+`lib/entitlements.ts` reads this value — never hard-code the `past_due` rule inline. The safest default is `false` (no access).
+
+### 4. Scope Boundaries
 
 #### Core Features (Mandatory)
 
@@ -137,8 +173,8 @@ CREATE POLICY "Users can read own profile"
 
 #### Optional Modules (Do Not Include by Default)
 
-- Workspaces and teams (`lib/modules/workspaces/`)
-- Usage-based billing (`lib/modules/usage-billing/`)
+- Workspaces and teams (`lib/modules/workspaces/`) — **requires new schema tables and may need a billing-owner relationship**
+- Usage-based billing (`lib/modules/usage-billing/`) — **requires new schema tables and billing-owner changes**
 - Supabase Storage (`lib/modules/storage/`)
 - Resend email (`lib/modules/email/`)
 - PostHog analytics (`lib/modules/analytics/`)
@@ -150,39 +186,24 @@ CREATE POLICY "Users can read own profile"
 
 ```typescript
 // lib/modules/<module>/index.ts
-export function init(): void;  // Register routes, hooks
-export type { <ModuleType> };  // Export types
+export function init(): void;
+export type { <ModuleType> };
 ```
 
 Modules:
 
 - Have their own database migrations
-- Do not modify core tables
+- Do not modify core tables (workspaces/usage-billing are exceptions — they require schema additions, documented in their own `migrations/` folder)
 - Can be removed without breaking core
 - Are opt-in (not installed by default)
 
-### 4. Vendor Code Isolation
+### 5. Vendor Code Isolation
 
-All Supabase and Stripe code **MUST** be isolated in `lib/vendor/`:
-
-```
-lib/vendor/
-├── supabase/
-│   ├── client.ts      # Browser client
-│   ├── server.ts      # Server client (service role)
-│   └── rls.ts         # RLS helper functions
-└── stripe/
-    ├── client.ts      # Stripe SDK initialization
-    ├── checkout.ts    # Checkout Session creation
-    ├── portal.ts      # Portal Session creation
-    └── webhook.ts     # Webhook handling
-```
+All Supabase and Stripe code **MUST** be isolated in `lib/vendor/`.
 
 **Rationale:** Makes vendor lock-in explicit; easier to swap if needed.
 
-### 5. Environment Validation
-
-Use Zod to validate environment variables at runtime:
+### 6. Environment Validation
 
 ```typescript
 // lib/env.ts
@@ -195,7 +216,7 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_"),
   STRIPE_PRICE_ID_PRO: z.string().startsWith("price_"),
-  STRIPE_API_VERSION: z.string(),
+  STRIPE_API_VERSION: z.string().min(1),
   NEXT_PUBLIC_APP_URL: z.string().url(),
 });
 
@@ -204,13 +225,18 @@ export const env = envSchema.parse(process.env);
 
 **Validation runs on:**
 
-- `npm run dev` (development)
-- `npm run build` (production build)
+- `npm run dev`
+- `npm run build`
 - Vercel deployment (via `vercel.json` prebuild script)
 
-### 6. Stripe API Version Pinning
+### 7. Stripe SDK & API Version Pinning
 
-**Always** pin Stripe API version in environment:
+Pin **both** the Node SDK version in `package.json` and the API version string in `.env.local`. Upgrade them together and run the full test suite before deploying.
+
+```json
+// package.json — pin a specific major version
+"stripe": "16.x"
+```
 
 ```bash
 # .env.local
@@ -220,21 +246,16 @@ STRIPE_API_VERSION=2024-06-20
 ```typescript
 // lib/vendor/stripe/client.ts
 import Stripe from "stripe";
+import { env } from "@/lib/env";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: process.env.STRIPE_API_VERSION,
+export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+  apiVersion: env.STRIPE_API_VERSION as Stripe.LatestApiVersion,
 });
 ```
 
-**Upgrade Process:**
+**Never** read `apiVersion` from `process.env` directly in the Stripe constructor — always go through the validated `env` object.
 
-1. Check [Stripe API changelog](https://stripe.com/docs/upgrades)
-2. Update `STRIPE_API_VERSION` in `.env.local`
-3. Test all Stripe integrations (Checkout, Portal, Webhooks)
-4. Update webhook event handling if needed
-5. Deploy
-
-### 7. Testing Strategy
+### 8. Testing Strategy
 
 **Framework:** Vitest (lightweight, fast)
 
@@ -247,17 +268,15 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 
 **Test Structure:**
 
-```
+```text
 tests/
-├── entitlements.test.ts    # Entitlement logic unit tests
-├── webhook.test.ts         # Webhook handler integration tests
-├── rls.test.ts             # RLS policy tests (Supabase helpers)
+├── entitlements.test.ts
+├── webhook.test.ts
+├── rls.test.ts
 └── fixtures/
-    ├── subscriptions.ts    # Test subscription data
-    └── webhook-events.ts   # Test webhook payloads
+├── subscriptions.ts
+└── webhook-events.ts
 ```
-
-**Example Test:**
 
 ```typescript
 // tests/entitlements.test.ts
@@ -266,13 +285,15 @@ import { hasActiveSubscription } from "@/lib/entitlements";
 
 describe("hasActiveSubscription", () => {
   it("returns true for active subscription", () => {
-    const subscription = { status: "active", current_period_end: new Date() };
-    expect(hasActiveSubscription(subscription)).toBe(true);
+    expect(hasActiveSubscription({ status: "active" })).toBe(true);
+  });
+
+  it("returns false for past_due when grace period is disabled", () => {
+    expect(hasActiveSubscription({ status: "past_due" })).toBe(false);
   });
 
   it("returns false for canceled subscription", () => {
-    const subscription = { status: "canceled", current_period_end: new Date() };
-    expect(hasActiveSubscription(subscription)).toBe(false);
+    expect(hasActiveSubscription({ status: "canceled" })).toBe(false);
   });
 
   it("returns false for no subscription", () => {
@@ -281,20 +302,9 @@ describe("hasActiveSubscription", () => {
 });
 ```
 
-### 8. Deployment Strategy
+### 9. Deployment Strategy
 
 **Platform:** Vercel (free tier sufficient for MVP)
-
-**Pre-deployment Checklist:**
-
-- [ ] Environment variables set in Vercel dashboard
-- [ ] Supabase production project linked
-- [ ] Stripe live mode keys configured
-- [ ] Webhook endpoint updated to production URL
-- [ ] Custom domain configured (optional)
-- [ ] Database migrations pushed to production
-
-**Vercel Configuration:**
 
 ```json
 // vercel.json
@@ -303,72 +313,33 @@ describe("hasActiveSubscription", () => {
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["syd1"] // Sydney for AU users
+  "regions": ["syd1"]
 }
 ```
-
-**Post-deployment:**
-
-1. Test signup flow end-to-end
-2. Test Checkout + webhook synchronization
-3. Test Customer Portal updates
-4. Monitor webhook logs for failures
 
 ---
 
 ## Decisions Requiring Your Approval
 
-Before I proceed with implementation, please confirm:
-
-1. **Database Schema:** Are the `profiles`, `subscriptions`, and `webhook_events` tables sufficient? Any missing fields or relationships?
-
-2. **Webhook Pattern:** Is the atomic claim pattern (DB-based, no Redis) acceptable for your use case, or do you prefer Redis for performance?
-
-3. **Optional Modules:** Which optional modules do you anticipate needing in the next 6 months? (workspaces, usage-billing, storage, email, analytics, AI)
-
-4. **Testing Strategy:** Is Vitest + 70% coverage target appropriate, or do you prefer a different testing framework/coverage goal?
-
-5. **Deployment:** Is Vercel + Supabase your preferred stack, or do you have alternative hosting requirements (AWS, self-hosted)?
+1. **Database Schema:** Are the `profiles`, `subscriptions`, and `webhook_events` tables sufficient?
+2. **Webhook Pattern:** Is the atomic DB-based claim acceptable, or do you prefer Redis for performance?
+3. **Optional Modules:** Which modules do you need in the next 6 months?
+4. **Testing Strategy:** Is Vitest + 70% coverage appropriate?
+5. **Deployment:** Is Vercel + Supabase your preferred stack?
 
 ---
 
-## Contradictions & Complexity Review
+## Potential Risks
 
-### Identified Contradictions
-
-**None found.** The architecture is internally consistent:
-
-- Modular monolith aligns with minimal dependencies
-- RLS + Supabase aligns with "never expose service-role key"
-- Webhooks as source of truth aligns with atomic claim pattern
-
-### Unnecessary Complexity
-
-**None identified.** All complexity is justified:
-
-- Webhook infrastructure is necessary for billing accuracy
-- RLS is necessary for security (no simpler alternative)
-- Environment validation is necessary for production reliability
-
-### Potential Risks
-
-| Risk                      | Mitigation                             |
-| ------------------------- | -------------------------------------- |
-| Webhook race conditions   | Atomic claim pattern, idempotency keys |
-| RLS misconfiguration      | Test policies, deny-by-default         |
-| Stripe API version drift  | Pin version, document upgrade path     |
-| Vendor lock-in (Supabase) | Standard SQL, exportable data          |
-| Vercel cold starts        | Pro tier, optimize bundle size         |
+| Risk                      | Mitigation                                      |
+| ------------------------- | ----------------------------------------------- |
+| Webhook race conditions   | Atomic claim + transaction boundary             |
+| Stale processing rows     | updated_at timeout recovery query (see README)  |
+| RLS misconfiguration      | Test policies, deny-by-default                  |
+| Stripe API version drift  | Pin SDK + API version together, test on upgrade |
+| Vendor lock-in (Supabase) | Standard SQL, exportable data                   |
+| Vercel cold starts        | Pro tier, optimize bundle size                  |
 
 ---
 
-## Next Steps
-
-1. **Review this document** for accuracy and completeness
-2. **Answer the 5 decision questions** above
-3. **Request any changes** to architecture or scope
-4. **Begin implementation** (Phase 1: Foundation)
-
----
-
-**Remember:** This is a **starter repository**, not a production SaaS. Ship fast, iterate based on user feedback, and add complexity only when needed.
+**Remember:** This is a **starter repository**, not a production SaaS. Ship fast, iterate, add complexity only when needed.

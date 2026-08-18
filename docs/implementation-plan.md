@@ -11,20 +11,21 @@
 - [ ] Set up shadcn/ui-style component system
 - [ ] Configure ESLint, Prettier, and path aliases (`@/`)
 - [ ] Create base layout with public nav and footer
+- [ ] **Use `npm` exclusively** — no pnpm or yarn
 
-**Acceptance Gate**: `npm run dev` starts without errors; `/` renders marketing page
+**Acceptance Gate:** `npm run dev` starts without errors; `/` renders marketing page
 
 ---
 
 #### 1.2 Supabase Integration
 
 - [ ] Install `@supabase/supabase-js` and `@supabase/ssr`
-- [ ] Configure Supabase client (browser + server)
-- [ ] Set up environment validation script
-- [ ] Create database migration for `profiles` table
-- [ ] Implement Row Level Security policies
+- [ ] Configure Supabase client (browser + server), always under `lib/` (not `src/lib/`)
+- [ ] Set up environment validation (`lib/env.ts` with Zod)
+- [ ] **Generate `supabase/migrations/0001_initial.sql`** from `docs/schema.md` — this file must exist before any application code references database tables
+- [ ] Implement RLS policies as specified in `docs/schema.md`
 
-**Acceptance Gate**: Authenticated user can read/write their own profile; RLS blocks cross-user access
+**Acceptance Gate:** `npx supabase db reset` applies cleanly; authenticated user can read/write own profile; RLS blocks cross-user access
 
 ---
 
@@ -36,7 +37,7 @@
 - [ ] Add session middleware for protected routes
 - [ ] Create `/dashboard` (protected) and `/profile` pages
 
-**Acceptance Gate**: User can sign up, verify email, log in, recover password, access protected dashboard
+**Acceptance Gate:** User can sign up, verify email, log in, recover password, access protected dashboard
 
 ---
 
@@ -44,37 +45,38 @@
 
 #### 2.1 Stripe Integration
 
-- [ ] Install `stripe` SDK (server-side only)
-- [ ] Configure Stripe environment variables with version pinning
+- [ ] Install `stripe` SDK — **pin to a specific major version** in `package.json` (e.g. `"stripe": "16.x"`)
+- [ ] Set `STRIPE_API_VERSION` in `.env.example` and validate in `lib/env.ts`
 - [ ] Create `/api/stripe/checkout` endpoint
 - [ ] Build pricing page with plan selection
 - [ ] Implement Checkout Session creation with metadata (`user_id`, `plan_id`)
 
-**Acceptance Gate**: User can select plan, complete Checkout, return to `/dashboard?session_id=...`
+**Acceptance Gate:** User can select plan, complete Checkout, return to `/dashboard?session_id=...`
 
 ---
 
 #### 2.2 Webhook Infrastructure
 
 - [ ] Create `/api/stripe/webhook` endpoint
-- [ ] Implement atomic webhook claim pattern (Redis-free, DB-based)
-- [ ] Handle `checkout.session.completed`, `customer.subscription.*`, `invoice.paid`
-- [ ] Add retry logic and dead-letter tracking for failed events
+- [ ] Implement atomic webhook claim: `UPDATE webhook_events SET status = 'processing' WHERE stripe_event_id = $1 AND status = 'pending' RETURNING id`
+- [ ] **Wrap subscription upsert + status update in a single database transaction** — a crash must not leave a permanently misleading `processing` row
+- [ ] Add `updated_at` to `webhook_events` and document stale-processing recovery query
+- [ ] Handle `checkout.session.completed`, `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`
 - [ ] Log unknown event types without crashing
 
-**Acceptance Gate**: Webhook processes valid events; invalid signatures return 400; retries succeed after simulated failure
+**Acceptance Gate:** Valid events processed atomically; invalid signatures return 400; stale `processing` rows can be reset via the documented query; retries succeed after simulated failure
 
 ---
 
 #### 2.3 Subscription Entitlements
 
-- [ ] Create `subscriptions` table with status tracking
-- [ ] Implement entitlement resolution logic (active/past_due/canceled/trialing)
-- [ ] Add `has_active_subscription()` helper with unknown-status fallback
+- [ ] Define `BILLING_CONFIG.pastDueGracePeriod` in `lib/config.ts` — default `false` (no access on `past_due`)
+- [ ] Implement `lib/entitlements.ts` reading from `BILLING_CONFIG`
+- [ ] Add `hasActiveSubscription()` helper with unknown-status deny-by-default fallback
 - [ ] Build `/billing` page linking to Customer Portal
-- [ ] Sync subscription metadata (plan, current_period_end, cancel_at_period_end)
+- [ ] Sync subscription metadata (`plan`, `current_period_end`, `cancel_at_period_end`)
 
-**Acceptance Gate**: User with active subscription sees premium features; canceled users lose access; Portal updates reflect in DB
+**Acceptance Gate:** Active users see premium features; `past_due` users are denied by default; Portal updates reflect in DB; changing `pastDueGracePeriod` changes behaviour without touching `entitlements.ts`
 
 ---
 
@@ -82,47 +84,47 @@
 
 #### 3.1 Environment & Configuration
 
-- [ ] Create `.env.example` with all required variables
-- [ ] Add runtime validation script (fail-fast on missing vars)
-- [ ] Document Stripe API version pinning strategy
-- [ ] Centralize product configuration (`lib/config.ts`)
+- [ ] Create `.env.example` with all required variables (including `STRIPE_API_VERSION`)
+- [ ] Document that `stripe` SDK version in `package.json` and `STRIPE_API_VERSION` must be upgraded together
+- [ ] Centralize all product settings in `lib/config.ts`
 
-**Acceptance Gate**: App refuses to start with invalid environment; config is single source of truth
+**Acceptance Gate:** App refuses to start with invalid/missing environment variables; config is single source of truth
 
 ---
 
 #### 3.2 Testing
 
-- [ ] Write unit tests for entitlement logic (Vitest)
-- [ ] Add integration tests for webhook handlers
+- [ ] Write unit tests for entitlement logic (including `past_due` default behaviour)
+- [ ] Add integration tests for webhook handlers (including transaction rollback scenario)
 - [ ] Test RLS policies with Supabase test helpers
 - [ ] Create test fixtures for subscription states
 
-**Acceptance Gate**: All tests pass; coverage > 70% for critical paths (auth, billing, entitlements)
+**Acceptance Gate:** All tests pass; coverage > 70% for critical paths (auth, billing, entitlements)
 
 ---
 
 #### 3.3 Documentation & Deployment
 
-- [ ] Write comprehensive `README.md` (setup, migration, deploy)
-- [ ] Create `CLAUDE.md` (implementation rules, constraints)
-- [ ] Document architectural decisions in `docs/decisions.md`
-- [ ] Deploy to Vercel with environment variables
+- [ ] Confirm all `README.md` commands match actual `package.json` scripts
+- [ ] Update `CLAUDE.md` if new conventions were introduced
+- [ ] Deploy to Vercel (`npm run build` must pass cleanly)
 - [ ] Configure production Stripe webhook endpoint
+- [ ] Run `npx supabase db push` against production project
 
-**Acceptance Gate**: Fresh clone + `npm install` + `npm run dev` works; Vercel deploy succeeds; production webhook receives events
+**Acceptance Gate:** Fresh clone + `npm install` + `npm run dev` works; Vercel deploy succeeds; production webhook receives events
 
 ---
 
 ## Risk Mitigation
 
-| Risk                     | Mitigation                                                                |
-| ------------------------ | ------------------------------------------------------------------------- |
-| Webhook race conditions  | Atomic claim pattern with DB row locking                                  |
-| Subscription state drift | Treat webhooks as source of truth; periodic reconciliation job (optional) |
-| RLS misconfiguration     | Test policies with multiple users; deny-by-default                        |
-| Stripe API version drift | Pin version in env; document upgrade path                                 |
-| Vendor lock-in           | Isolate Supabase/Stripe code in `lib/vendor/`                             |
+| Risk                     | Mitigation                                                                    |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| Webhook race conditions  | Atomic claim pattern with DB row locking                                      |
+| Stale processing rows    | `updated_at` timeout recovery query (documented in README)                    |
+| Subscription state drift | Webhooks as source of truth; periodic reconciliation job (optional)           |
+| RLS misconfiguration     | Test with multiple users; deny-by-default; no ambiguous service-role policies |
+| Stripe API version drift | Pin SDK version + API version string together; test on upgrade                |
+| Vendor lock-in           | Isolate Supabase/Stripe code in `lib/vendor/`                                 |
 
 ---
 
@@ -142,29 +144,22 @@
 
 ## Optional Module Boundaries
 
-Modules are designed as opt-in additions:
-
-```
+```text
 lib/modules/
-├── workspaces/      # Multi-tenant teams (requires schema changes)
-├── usage-billing/   # Metered events + invoices
-├── storage/         # Supabase Storage wrappers
-├── email/           # Resend integration
-├── analytics/       # PostHog client
-└── ai/              # LLM API clients
+├── workspaces/ # Multi-tenant teams — REQUIRES schema additions (new tables + FK to profiles)
+├── usage-billing/ # Metered events — REQUIRES schema additions (may need billing-owner on subscriptions)
+├── storage/ # Supabase Storage wrappers
+├── email/ # Resend integration
+├── analytics/ # PostHog client
+└── ai/ # LLM API clients
 ```
 
-Each module:
-
-- Has its own database migrations
-- Exports a single `init()` function
-- Does not modify core tables
-- Can be removed without breaking core
+Each module exports a single `init()` function and has its own migrations. `workspaces` and `usage-billing` are exceptions to the "no core-table impact" rule — review `docs/decisions.md` before activating them.
 
 ---
 
 ## Next Steps
 
 1. **Approve this plan** (or request changes)
-2. **Answer decision questions** (see end of `CLAUDE.md`)
-3. **Begin Phase 1** with `npx create-next-app`
+2. **Answer decision questions** (see `CLAUDE.md`)
+3. **Begin Phase 1** with `npx create-next-app@latest`

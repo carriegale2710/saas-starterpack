@@ -30,7 +30,7 @@ A minimal, maintainable modular monolith for solo-founder subscription SaaS prod
 ### Prerequisites
 
 - Node.js 20+
-- npm or pnpm
+- npm (comes pre-installed with Node; no additional package manager needed)
 - Supabase account (free tier)
 - Stripe account (test mode)
 - Vercel account (free tier)
@@ -46,7 +46,6 @@ npm install
 ### 2. Environment Setup
 
 ```bash
-# Copy example environment file
 cp .env.example .env.local
 ```
 
@@ -62,7 +61,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key  # Server-side only
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_ID_PRO=price_...
-STRIPE_API_VERSION=2024-06-20
+STRIPE_API_VERSION=2024-06-20  # Pinned — change only after deliberate upgrade
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -74,13 +73,13 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 # Install Supabase CLI
 npm install -g supabase
 
-# Login to Supabase
+# Login
 npx supabase login
 
 # Link to your project
 npx supabase link --project-ref your-project-ref
 
-# Push schema to database
+# Apply migrations (includes initial migration at supabase/migrations/0001_initial.sql)
 npx supabase db push
 ```
 
@@ -88,27 +87,30 @@ npx supabase db push
 
 #### 4.1 Create Products & Prices
 
-```bash
-# In Stripe Dashboard: Products → Add product
-# Create "Pro Plan" with monthly price
-# Copy price ID to STRIPE_PRICE_ID_PRO
+In Stripe Dashboard: **Products → Add product**, create "Pro Plan" with monthly price, copy price ID to `STRIPE_PRICE_ID_PRO`.
+
+#### 4.2 Pin the Stripe Node SDK
+
+The `package.json` pins a specific Stripe SDK version alongside the API version:
+
+```json
+"stripe": "16.x"
 ```
 
-#### 4.2 Configure Webhooks
+Both the SDK version and `STRIPE_API_VERSION` must be updated together and tested before deploying.
 
-```bash
-# In Stripe Dashboard: Developers → Webhooks
-# Add endpoint: https://your-domain.com/api/stripe/webhook
-# Select events:
-#   - checkout.session.completed
-#   - customer.subscription.created
-#   - customer.subscription.updated
-#   - customer.subscription.deleted
-#   - customer.subscription.pending_update.*
-#   - invoice.paid
-#   - invoice.payment_failed
-# Copy webhook signing secret to STRIPE_WEBHOOK_SECRET
-```
+#### 4.3 Configure Webhooks
+
+In Stripe Dashboard: **Developers → Webhooks**, add endpoint `https://your-domain.com/api/stripe/webhook` with these events:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
+
+Copy the webhook signing secret to `STRIPE_WEBHOOK_SECRET`.
 
 ### 5. Run Development Server
 
@@ -121,20 +123,15 @@ Open http://localhost:3000
 ### 6. Deploy to Vercel
 
 ```bash
-# Install Vercel CLI
 npm install -g vercel
-
-# Deploy
 vercel
-
-# Set environment variables in Vercel dashboard
-# Redeploy
+# Set environment variables in Vercel dashboard, then:
 vercel --prod
 ```
 
 ## Database Schema
 
-See [`docs/schema.md`](docs/schema.md) for complete schema definition.
+See [`docs/schema.md`](docs/schema.md) for complete schema definition and the initial migration at `supabase/migrations/0001_initial.sql`.
 
 ### Core Tables
 
@@ -144,7 +141,7 @@ See [`docs/schema.md`](docs/schema.md) for complete schema definition.
 
 ### Row Level Security
 
-All tables have RLS enabled. Users can only access their own data.
+All tables have RLS enabled. The **service-role key bypasses RLS entirely** — it is not granted access through any policy. Authenticated users access only their own rows via `auth.uid()` policies. The `webhook_events` table has no authenticated-user policies; the service-role key is the only means of access.
 
 ## Authentication
 
@@ -198,27 +195,43 @@ All tables have RLS enabled. Users can only access their own data.
 | `invoice.paid`                  | Update `current_period_end` |
 | `invoice.payment_failed`        | Set status `past_due`       |
 
+### Webhook Atomicity & Stale-Processing Recovery
+
+The webhook handler uses a two-step database transaction:
+
+1. **Claim**: `UPDATE webhook_events SET status = 'processing' WHERE stripe_event_id = $1 AND status = 'pending' RETURNING id` — if no row is returned, the event is already claimed; return 200 immediately.
+2. **Process + commit**: the subscription upsert and the status update to `processed` run inside the **same database transaction**. A crash cannot leave a permanently misleading `processing` row because the transaction rolls back.
+
+A stale `processing` row (worker crash before commit) is recovered by a scheduled job or manual query:
+
+```sql
+-- Reset events stuck in processing for more than 10 minutes
+UPDATE webhook_events
+SET status = 'pending', error_message = 'reset after stale processing'
+WHERE status = 'processing'
+  AND updated_at < NOW() - INTERVAL '10 minutes';
+```
+
+Add `updated_at` to `webhook_events` to enable this query (see `docs/schema.md`).
+
 ## Entitlement Rules
 
-Subscription status determines feature access:
+Entitlement policy is defined in `lib/config.ts` and enforced in `lib/entitlements.ts`. The **default policy** for this template is:
 
-| Status                             | Access Level                |
-| ---------------------------------- | --------------------------- |
-| `active`, `trialing`               | Full access                 |
-| `past_due`                         | Grace period (read-only)    |
-| `canceled`, `unpaid`, `incomplete` | No access                   |
-| No subscription                    | No access (deny by default) |
+| Status                             | Access Level                                                                           |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `active`, `trialing`               | Full access                                                                            |
+| `past_due`                         | **No access** (deny by default — change in `lib/config.ts` if you want a grace period) |
+| `canceled`, `unpaid`, `incomplete` | No access                                                                              |
+| No subscription                    | No access (deny by default)                                                            |
+
+To enable a grace period for `past_due`, set `BILLING_PAST_DUE_GRACE = true` in `lib/config.ts`. This is a **product decision**, not a default.
 
 ## Testing
 
 ```bash
-# Run tests
 npm test
-
-# Run tests with coverage
 npm run test:coverage
-
-# Run specific test file
 npm test -- subscription.test.ts
 ```
 
@@ -241,7 +254,7 @@ npm test -- subscription.test.ts
 | `STRIPE_SECRET_KEY`             | Stripe secret key (test or live)    |
 | `STRIPE_WEBHOOK_SECRET`         | Stripe webhook signing secret       |
 | `STRIPE_PRICE_ID_PRO`           | Stripe price ID for Pro plan        |
-| `STRIPE_API_VERSION`            | Pinned Stripe API version           |
+| `STRIPE_API_VERSION`            | Pinned Stripe API version string    |
 | `NEXT_PUBLIC_APP_URL`           | App URL (for redirects)             |
 
 ### Optional
@@ -252,27 +265,57 @@ npm test -- subscription.test.ts
 | `SENTRY_DSN`              | Sentry error tracking DSN |
 | `RESEND_API_KEY`          | Resend email API key      |
 
-## Stripe API Version Pinning
+## Stripe SDK & API Version Pinning
 
-Stripe API versions are pinned to prevent breaking changes:
+Pin **both** the SDK version in `package.json` and the API version in `.env.local`. They must be upgraded together:
+
+```json
+// package.json
+"stripe": "16.x"
+```
 
 ```bash
-# In .env.local
+# .env.local
 STRIPE_API_VERSION=2024-06-20
+```
 
-# In code
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: process.env.STRIPE_API_VERSION,
+```typescript
+// lib/vendor/stripe/client.ts
+const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+  apiVersion: env.STRIPE_API_VERSION as Stripe.LatestApiVersion,
 });
 ```
 
 **Upgrade Process:**
 
-1. Check Stripe changelog for new version
-2. Update `STRIPE_API_VERSION` in `.env.local`
-3. Test all Stripe integrations
-4. Update webhook events if needed
-5. Deploy
+1. Read Stripe changelog for the new version
+2. Update `stripe` version in `package.json` and run `npm install`
+3. Update `STRIPE_API_VERSION` in `.env.local`
+4. Run the full test suite (`npm test`)
+5. Test Checkout, Portal, and webhook flows manually
+6. Deploy
+
+## Optional Modules
+
+Modules are opt-in. **Note:** `workspaces` and `usage-billing` are not schema-neutral — they may require new foreign keys or a billing-owner relationship. Review `docs/decisions.md` before adding them.
+
+### Available Modules
+
+- `workspaces` — Multi-tenant teams (**requires schema additions**)
+- `usage-billing` — Metered usage + invoices (**requires schema additions**)
+- `storage` — Supabase Storage wrappers
+- `email` — Resend integration
+- `analytics` — PostHog client
+- `ai` — LLM API clients
+
+### Adding a Module
+
+```bash
+npm install <module-deps>
+npx supabase migration new add_<module>_tables
+import { init } from '@/lib/modules/<module>';
+init();
+```
 
 ## Deployment Checklist
 
@@ -282,66 +325,36 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 - [ ] Webhook endpoint updated to production URL
 - [ ] Custom domain configured (optional)
 - [ ] SSL certificate enabled (automatic on Vercel)
-- [ ] Database migrations pushed to production
+- [ ] Database migrations pushed to production (`npx supabase db push`)
 - [ ] Test signup + checkout flow end-to-end
-
-## Optional Modules
-
-Modules are opt-in additions. See [`docs/decisions.md`](docs/decisions.md) for module boundaries.
-
-### Available Modules
-
-- `workspaces` — Multi-tenant teams
-- `usage-billing` — Metered usage + invoices
-- `storage` — Supabase Storage wrappers
-- `email` — Resend integration
-- `analytics` — PostHog client
-- `ai` — LLM API clients
-
-### Adding a Module
-
-```bash
-# Install module dependencies
-npm install <module-deps>
-
-# Add migrations
-npx supabase migration new add_<module>_tables
-
-# Import module in app
-import { init } from '@/lib/modules/<module>';
-init();
-```
 
 ## Troubleshooting
 
 ### Supabase RLS Errors
 
 ```sql
--- Test RLS policies
+-- Test RLS as an authenticated user
 SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claims" TO '{"sub": "<user-id>"}';
-
--- Query should return only user's data
 SELECT * FROM profiles;
 ```
+
+Service-role access bypasses RLS entirely and requires no policy — do not add `auth.uid() IS NULL` policies to simulate it.
 
 ### Stripe Webhook Failures
 
 ```bash
-# Check webhook logs
+# Check event log
 npx supabase table logs select --table webhook_events
 
-# Replay failed event
-curl -X POST https://api.stripe.com/v1/events/<event-id>/webhook_endpoints
+# Replay failed event via Stripe CLI
+stripe events resend <event-id>
 ```
 
 ### Vercel Build Errors
 
 ```bash
-# Check build logs
 vercel logs <deployment-id>
-
-# Rebuild locally
 npm run build
 ```
 
