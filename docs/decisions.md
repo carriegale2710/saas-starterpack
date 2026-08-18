@@ -217,6 +217,22 @@ export type { <ModuleType> };
 
 ---
 
+## 13. Known Audit Vulnerabilities (Stage 2 — revisit at Stage 7)
+
+**Status as of Stage 2 completion (2026-08-19). Reviewed against `next@15.5.23` — the latest stable 15.x release.**
+
+| Vulnerability | Severity | Location | Fixable on 15.x? | Action |
+|---|---|---|---|---|
+| `postcss` ≤8.5.22 — XSS, path traversal, source map disclosure | High | Bundled inside `next@15.x` internals — not a direct dependency | ❌ No 15.x patch; `npm show next versions` confirms latest stable is 15.5.23 with no further patch | Monitor for Next.js 15.x security release; evaluate upgrade to 16.x at Stage 7 |
+| `sharp` <0.35.0 — libvips CVE-2026-33327/33328/35590/35591 | High | Bundled inside `next@15.x` for image optimisation | ❌ Same as above | Same as above |
+| `esbuild` ≤0.24.2 — dev server request interception | Moderate | Transitive via `vitest` → `vite` | ✅ Fix: `npm install --save-dev vitest@^4.0.0 @vitest/coverage-v8@^4.0.0` | Low priority — dev-only, not production; fix at Stage 6 when upgrading test tooling |
+
+**Why not `npm audit fix --force`:** This would silently upgrade to `next@16.3.1`, which is a breaking major version change (async params enforcement, Node 20.9+ minimum, React Compiler changes). Do not run it.
+
+**Next review point:** Stage 7 (Security Review). At that point evaluate whether a Next.js 15.x patch has been released, or whether a controlled upgrade to 16.x is appropriate.
+
+---
+
 ## Risks & Mitigations
 
 | Risk                      | Likelihood | Impact | Mitigation                                            |
@@ -229,8 +245,6 @@ export type { <ModuleType> };
 | Vercel cold starts        | Medium     | Low    | Pro tier, optimize bundle size                        |
 
 ---
-
-##
 
 ## Non-Goals (Explicitly Out of Scope)
 
