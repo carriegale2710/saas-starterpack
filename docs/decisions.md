@@ -217,19 +217,18 @@ export type { <ModuleType> };
 
 ---
 
-## 13. Known Audit Vulnerabilities (Stage 2 — revisit at Stage 7)
+## 13. Known Audit Flags (Stage 2 — reviewed 2026-08-19)
 
-**Status as of Stage 2 completion (2026-08-19). Reviewed against `next@15.5.23` — the latest stable 15.x release.**
+**Baseline: `next@15.5.23` — latest stable 15.x. `npm audit fix --force` must not be run as it would silently upgrade to `next@16.3.1` (breaking major).**
 
-| Vulnerability | Severity | Location | Fixable on 15.x? | Action |
-|---|---|---|---|---|
-| `postcss` ≤8.5.22 — XSS, path traversal, source map disclosure | High | Bundled inside `next@15.x` internals — not a direct dependency | ❌ No 15.x patch; `npm show next versions` confirms latest stable is 15.5.23 with no further patch | Monitor for Next.js 15.x security release; evaluate upgrade to 16.x at Stage 7 |
-| `sharp` <0.35.0 — libvips CVE-2026-33327/33328/35590/35591 | High | Bundled inside `next@15.x` for image optimisation | ❌ Same as above | Same as above |
-| `esbuild` ≤0.24.2 — dev server request interception | Moderate | Transitive via `vitest` → `vite` | ✅ Fix: `npm install --save-dev vitest@^4.0.0 @vitest/coverage-v8@^4.0.0` | Low priority — dev-only, not production; fix at Stage 6 when upgrading test tooling |
+| Flag | npm severity | Actual exploitability in this project | Action |
+|---|---|---|---|
+| `postcss` ≤8.5.22 — XSS via unescaped `</style>` (GHSA-qx2v-qp2m-jg93) | High | **Not exploitable.** Advisory states: *"Impact non-bundler use cases since bundlers protect against XSS on their own."* Next.js uses PostCSS as a build-time CSS processor — it never parses user-submitted CSS and re-embeds it in `<style>` tags at runtime. The attack requires exactly that pattern. | No action needed. Reassess if a feature ever re-stringifies user CSS into HTML. |
+| `postcss` — source map path traversal (GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp, GHSA-r28c-9q8g-f849) | High | Build-tool only. PostCSS source maps are generated during `npm run build` from your own source files, not from attacker-controlled input. No user input reaches PostCSS in this architecture. | No action needed for this use case. |
+| `sharp` <0.35.0 — libvips CVE-2026-33327/33328/35590/35591 | High | Bundled inside `next@15.x` for image optimisation. Risk applies only if serving attacker-controlled images through `next/image`. This project does not do that at Stage 2. | Reassess at Stage 7 if `next/image` is used with user-uploaded images. Otherwise low risk. |
+| `esbuild` ≤0.24.2 — dev server request interception | Moderate | **Dev-only.** Only affects `npm run dev` via Vitest's vite internals. Not present in production builds. | Fix at Stage 6: `npm install --save-dev vitest@^4.0.0 @vitest/coverage-v8@^4.0.0` |
 
-**Why not `npm audit fix --force`:** This would silently upgrade to `next@16.3.1`, which is a breaking major version change (async params enforcement, Node 20.9+ minimum, React Compiler changes). Do not run it.
-
-**Next review point:** Stage 7 (Security Review). At that point evaluate whether a Next.js 15.x patch has been released, or whether a controlled upgrade to 16.x is appropriate.
+**Next review point:** Stage 7 (Security Review).
 
 ---
 
