@@ -1,10 +1,103 @@
-Use a **seven-stage workflow**, with one Claude Code session or checkpoint per stage. Keep **thinking on** for architecture, security, billing, and debugging; use **medium effort** for routine implementation and **high/xhigh** only for genuinely complex work. Effort controls the depth and frequency of reasoning, while the thinking toggle controls whether reasoning is shown; lower effort is faster and cheaper, while higher effort is intended for complex coding tasks. [code.claude](https://code.claude.com/docs/en/model-config)
+# Prompt Plan workflow for using Claude to build this project
 
-Use `/effort low`, `/effort medium`, `/effort high`, or `/effort xhigh` before each stage. If your interface does not expose `xhigh`, use `high`. [code.claude](https://code.claude.com/docs/en/model-config)
+Use an **eight-stage workflow**, with one Claude Code session or checkpoint per stage. Keep **thinking on** for architecture, security, billing, and debugging; use **medium effort** for routine implementation and **high/xhigh** only for genuinely complex work. Effort controls the depth and frequency of reasoning, while the thinking toggle controls whether reasoning is shown; lower effort is faster and cheaper, while higher effort is intended for complex coding tasks. [code.claude](https://code.claude.com/docs/en/model-config)
 
-# Before starting
+## Documentation layout
 
-## Step 1: Create the repository
+The architecture stage now produces a split documentation set:
+
+- `docs/implementation-plan.md` is the concise execution checklist.
+- `docs/schema.md` is the database contract.
+- `docs/decisions.md` records approved architectural choices.
+- `README.md` contains setup, operations, migration, deployment, and rationale guidance.
+- `CLAUDE.md` contains implementation conventions and non-negotiable security rules.
+
+Later stages must read the relevant split documents and update all affected files when implementation changes a decision or contract.
+
+## AI Platform Recommendation
+
+### Use this combination now
+
+1. **Perplexity Pro**: research, architecture, documentation, current vendor guidance, and independent review.
+2. **Claude Free**: bounded implementation tasks and code generation.
+3. **Your local tools**: Git, VS Code, Supabase CLI, Stripe CLI, Vitest, Playwright, and the actual test suite as the source of truth.
+
+This gives you the complementary strengths of both tools without paying for Claude Pro.
+Perplexity Pro plus Claude Free is specifically a sensible combination when research is a high priority and implementation can be divided into smaller tasks.
+
+### Adjust your stage workflow
+
+For each stage:
+
+- Use Perplexity Pro to research current technical requirements.
+- Update the relevant files under docs/ if the research changes a decision.
+- Give Claude Free only the current stage and acceptance criteria.
+- Ask Claude to inspect the repository before editing.
+- Have it make one coherent batch of changes.
+- Run tests locally.
+- Return failures and the relevant files to Claude.
+- Use Perplexity Pro as an independent reviewer if the issue involves Stripe, Supabase, security, or current APIs.
+- Commit only after reviewing the diff.
+
+### When Claude Pro Becomes Worth It
+
+Consider paying for Claude Pro when at least one of these becomes true:
+
+- Claude Free repeatedly limits you during a single implementation stage.
+- You spend more time reconstructing context than writing code.
+- You need long multi-file debugging sessions.
+- You want Claude Code to inspect, edit, test, and iterate in one workflow.
+- You are actively shipping multiple SaaS products and use the starter every week.
+- A one-month subscription would meaningfully accelerate implementation of the auth, billing, or testing stages.
+
+> For now, do not subscribe just because Claude Pro might be better. Complete Stage 2 with Perplexity Pro plus Claude Free. If the free-tier limits materially slow you down during Stage 3 or Stage 4, buy Claude Pro for one month, use it to complete the difficult implementation stages, then reassess rather than treating it as a permanent expense.
+
+## Recommended settings by stage
+
+| Stage                 | Model          | Thinking |      Effort |
+| --------------------- | -------------- | -------: | ----------: |
+| Architecture plan     | Opus           |       On |        High |
+| Foundation            | Sonnet         |       On |      Medium |
+| Supabase auth/RLS     | Sonnet or Opus |       On | Medium–High |
+| Stripe billing        | Opus           |       On |        High |
+| Optional integrations | Sonnet         |       On |  Low–Medium |
+| Testing/docs          | Sonnet         |       On |      Medium |
+| Security review       | Opus           |       On |  High–xhigh |
+| Final validation      | Sonnet         |       On |      Medium |
+
+The thinking toggle is mainly about whether reasoning is displayed; effort is the more important control for how much work Claude performs. High is a strong default for difficult coding tasks, while xhigh is better reserved for long-running or unusually complex work. [platform.claude](https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost)
+
+## Recommended Git checkpoints
+
+Create a commit after each stage:
+
+```bash
+git add .
+git commit -m "stage 1: architecture plan"
+git commit -m "stage 2: project foundation"
+git commit -m "stage 3: Supabase authentication"
+git commit -m "stage 4: Stripe billing"
+git commit -m "stage 5: optional integrations"
+git commit -m "stage 6: testing and documentation"
+git commit -m "stage 7: security review"
+git commit -m "stage 8: final validation"
+```
+
+A safer approach is to commit only after reviewing the diff:
+
+```bash
+git diff --stat
+git diff
+npm run validate
+git add .
+git commit -m "Describe the completed stage"
+```
+
+The crucial improvement is to make every stage have **one purpose, explicit exclusions, acceptance criteria, and verification commands**. That prevents Claude from building an impressive but unnecessarily expensive boilerplate.
+
+## Before starting
+
+### Step 1: Create the repository
 
 ```bash
 mkdir my-saas-template
@@ -15,7 +108,7 @@ claude
 
 Do not create the Next.js app yet. Let Claude inspect the empty repository and propose the structure first.
 
-## Step 2: Set the model
+### Step 2: Set the model
 
 Recommended default:
 
@@ -26,20 +119,20 @@ Recommended default:
 
 Claude Code’s model configuration supports changing effort through `/effort`, the model picker, a command-line flag, or project settings. [code.claude](https://code.claude.com/docs/en/model-config)
 
-# Stage 1: Architecture
+## Stage 1: Architecture
 
-## Purpose
+### Purpose
 
-Create a plan without writing application code. This prevents Claude from prematurely building optional features or choosing unnecessary dependencies.
+Create and review the architecture documentation without writing application code. The output is split by purpose so the implementation plan stays concise and the durable contracts are easy to maintain.
 
-## Settings
+### Settings
 
 - **Model:** Opus if available; otherwise Sonnet.
 - **Thinking:** On.
 - **Effort:** High.
 - **Expected duration:** One session.
 
-## Prompt
+### Prompt
 
 ```text
 You are the lead engineer designing a reusable starter repository for lean, subscription-based micro-SaaS applications.
@@ -106,23 +199,26 @@ Treat these as optional modules:
 
 ## Required planning output
 
-Create `docs/implementation-plan.md` containing:
+Create or update these documentation files under `docs/`:
 
-1. Architecture overview.
-2. Proposed directory structure.
-3. Core database schema.
-4. Authentication flow.
-5. Stripe billing flow.
-6. Webhook and idempotency strategy.
-7. Entitlement model.
-8. Security model.
-9. Optional module boundaries.
-10. Environment variables.
-11. Testing strategy.
-12. Deployment strategy.
-13. Major risks and trade-offs.
-14. Explicit non-goals.
-15. Phased implementation sequence.
+- `docs/implementation-plan.md` — concise build order and acceptance gates only.
+- `docs/schema.md` — authoritative core database schema, constraints, indexes, timestamps, ownership, and RLS expectations.
+- `docs/decisions.md` — authoritative architectural decisions and trade-offs.
+
+Keep operational setup, migration commands, deployment guidance, and concise rationale in `README.md`. Keep implementation rules, security constraints, scope boundaries, and Claude Code workflow conventions in `CLAUDE.md`.
+
+The documentation must cover:
+
+1. Architecture and directory structure.
+2. Authentication and password recovery.
+3. Stripe Checkout, Portal, metadata, and ownership resolution.
+4. Atomic webhook claim, processing/processed/failed states, retries, unknown events, and entitlement-controlling events including `invoice.paid`.
+5. Entitlement rules and unknown subscription-status handling.
+6. Service-role boundaries and RLS.
+7. Optional module boundaries.
+8. Environment variables and pinned Stripe SDK/API-version guidance.
+9. Testing and deployment strategy.
+10. Risks, non-goals, implementation sequence, and acceptance gates.
 
 For every proposed dependency, state:
 
@@ -140,34 +236,57 @@ Before finishing:
 - Ask no more than five decisions that genuinely require my approval.
 ```
 
-## Checkpoint
+### Completed record
 
-Review `docs/implementation-plan.md`. Make sure it does not require every optional integration in the initial codebase.
+Stage 1 is complete. The first architecture prompt produced a large `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`. We then reviewed it and corrected the following high-risk issues before any application code was written:
 
-Then commit:
+- Replaced the webhook read-then-insert ledger with an atomic event claim using `INSERT ... ON CONFLICT DO NOTHING`.
+- Added explicit `processing`, `processed`, and `failed` webhook states with safe retry semantics and a rule that successful 2xx responses occur only after processing succeeds.
+- Added `invoice.paid` and clarified the complete set of entitlement-controlling subscription events.
+- Corrected service-role usage: it is consumed by the webhook route and a narrowly scoped server-only billing repository for lazy Customer provisioning, and never by client code.
+- Documented local Customer-mapping uniqueness and the rare orphaned Stripe Customer race without incorrectly calling it strict external API idempotency.
+- Removed the premature core billing-owner abstraction; core billing remains user-owned, and future organization billing is explicitly documented as a schema, data-migration, foreign-key, and RLS rewrite.
+- Added Stripe metadata and ownership-resolution rules for Checkout Sessions, Customers, and Subscriptions.
+- Added password-recovery request and callback flows.
+- Added `updated_at`, constraints, and unknown-status handling to mutable records.
+- Expanded tests for invoice payment, webhook failure/retry, concurrent duplicates, unknown events/statuses, unauthenticated billing requests, cross-user access, password recovery, and local Supabase RLS.
+- Added manual migration ordering and the destructive `supabase db reset` warning.
+- Split the documentation into `docs/implementation-plan.md`, `docs/schema.md`, `docs/decisions.md`, `README.md`, and `CLAUDE.md`.
+
+The current architecture record is therefore the split documentation set, not the original long-form plan. Review these files before beginning Stage 2:
 
 ```bash
-git add .
-git commit -m "Add SaaS template architecture plan"
+sed -n '1,240p' docs/implementation-plan.md
+sed -n '1,260p' docs/schema.md
+sed -n '1,260p' docs/decisions.md
+sed -n '1,240p' README.md
+sed -n '1,260p' CLAUDE.md
 ```
 
-# Stage 2: Project foundation
+Commit the architecture documentation checkpoint:
 
-## Settings
+```bash
+git add docs/implementation-plan.md docs/schema.md docs/decisions.md README.md CLAUDE.md
+git commit -m "Finalize SaaS starter architecture documentation"
+```
+
+## Stage 2: Project foundation
+
+### Settings
 
 - **Model:** Sonnet.
 - **Thinking:** On.
 - **Effort:** Medium.
 - **Expected duration:** One session.
 
-## Prompt
+### Prompt
 
 ```text
-Implement the foundation phase from `docs/implementation-plan.md`.
+Implement the foundation phase from `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
 
 Before editing:
 
-1. Read `docs/implementation-plan.md`.
+1. Read `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
 2. Inspect the current repository.
 3. Read any existing `CLAUDE.md`.
 4. Confirm the files and dependencies that are in scope.
@@ -235,7 +354,7 @@ At the end, report:
 Stop when the foundation acceptance criteria pass.
 ```
 
-## Checkpoint
+### Checkpoint
 
 Verify that the app starts:
 
@@ -252,16 +371,16 @@ git commit -m "Add reusable SaaS application foundation"
 
 Replace `npm` with your configured package-manager command if needed.
 
-# Stage 3: Supabase authentication
+## Stage 3: Supabase authentication
 
-## Settings
+### Settings
 
 - **Model:** Sonnet.
 - **Thinking:** On.
 - **Effort:** Medium.
 - **Increase to high** if Claude encounters SSR, cookie, middleware, or RLS problems.
 
-## Prompt
+### Prompt
 
 ```text
 Implement the Supabase authentication and database foundation described in the approved plan.
@@ -269,7 +388,7 @@ Implement the Supabase authentication and database foundation described in the a
 Before editing:
 
 1. Read `CLAUDE.md`.
-2. Read `docs/implementation-plan.md`.
+2. Read `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
 3. Inspect the existing application structure.
 4. Inspect the current Next.js and Supabase package versions.
 5. Follow the current Supabase SSR approach for Next.js rather than relying on deprecated helpers.
@@ -294,8 +413,6 @@ Create:
 Create database migrations for:
 
 - profiles
-- optional workspaces only if included in the approved core plan
-- required membership tables only if workspaces are enabled
 
 Add:
 
@@ -340,14 +457,14 @@ Run:
 Update:
 
 - README
-- `docs/database.md`
+- `docs/schema.md`
 - `docs/deployment.md`
 - `CLAUDE.md` if new conventions are introduced
 
 Stop when authentication works locally or when the exact external setup limitation is documented.
 ```
 
-## Checkpoint
+### Checkpoint
 
 Test manually:
 
@@ -366,9 +483,9 @@ git add .
 git commit -m "Add Supabase authentication and database foundation"
 ```
 
-# Stage 4: Stripe subscriptions
+## Stage 4: Stripe subscriptions
 
-## Settings
+### Settings
 
 - **Model:** Opus preferred.
 - **Thinking:** On.
@@ -377,14 +494,14 @@ git commit -m "Add Supabase authentication and database foundation"
 
 Stripe billing is a high-risk part of the template because incorrect webhook or entitlement logic can grant access incorrectly. Stripe’s subscription documentation covers subscription lifecycle handling, while the implementation should use verified webhooks as the server-side billing source of truth. [docs.stripe](https://docs.stripe.com/subscriptions)
 
-## Prompt
+### Prompt
 
 ```text
 Implement the Stripe subscription module from the approved architecture plan.
 
 Before editing:
 
-1. Read `CLAUDE.md`, `docs/implementation-plan.md`, and `docs/database.md`.
+1. Read `CLAUDE.md`, `docs/implementation-plan.md`, and `docs/schema.md`.
 2. Inspect the existing Supabase clients and database types.
 3. Inspect the current Stripe SDK version.
 4. Confirm the existing user and profile schema.
@@ -491,7 +608,7 @@ Review the final diff for:
 Stop when the billing acceptance criteria pass.
 ```
 
-## Checkpoint
+### Checkpoint
 
 Use Stripe CLI locally:
 
@@ -516,18 +633,18 @@ git add .
 git commit -m "Add Stripe subscriptions and entitlement system"
 ```
 
-# Stage 5: Optional integrations
+## Stage 5: Optional integrations
 
 Do not implement every integration automatically. Choose only the ones you need for your starter.
 
-## Settings
+### Settings
 
 - **Model:** Sonnet.
 - **Thinking:** On.
 - **Effort:** Low or medium.
 - **Use high** for background jobs or complex file-processing workflows.
 
-## Prompt
+### Prompt
 
 ```text
 Implement only the following optional modules:
@@ -543,7 +660,7 @@ Implement only the following optional modules:
 Before editing:
 
 1. Read `CLAUDE.md`.
-2. Read the implementation plan.
+2. Read `docs/implementation-plan.md`, `docs/schema.md`, and `docs/decisions.md`.
 3. Inspect current integration patterns.
 4. Confirm that each selected module is not already implemented.
 5. Do not implement unselected modules.
@@ -564,7 +681,7 @@ Do not add abstractions beyond what is needed to isolate the integration.
 Run lint, type checking, tests, and build. Update README, relevant documentation, and CLAUDE.md. Stop after the selected modules are complete.
 ```
 
-## Checkpoint
+### Checkpoint
 
 Make sure the app still works with optional environment variables removed. This is important: a reusable template should not fail merely because one project does not use email, analytics, or monitoring.
 
@@ -575,16 +692,16 @@ git add .
 git commit -m "Add selected optional SaaS integrations"
 ```
 
-# Stage 6: Testing and documentation
+## Stage 6: Testing and documentation
 
-## Settings
+### Settings
 
 - **Model:** Sonnet.
 - **Thinking:** On.
 - **Effort:** Medium.
 - **Use high** if tests reveal security or data-integrity failures.
 
-## Prompt
+### Prompt
 
 ```text
 Audit and complete the testing and documentation for the reusable SaaS starter.
@@ -667,16 +784,16 @@ Fix documentation that references missing commands or files.
 Do not perform unrelated code refactors.
 ```
 
-# Stage 7: Security and maintainability review
+## Stage 7: Security and maintainability review
 
-## Settings
+### Settings
 
 - **Model:** Opus.
 - **Thinking:** On.
 - **Effort:** xhigh or high.
 - **Do not use low effort** for this stage.
 
-## Prompt
+### Prompt
 
 ```text
 Perform a security, correctness, and maintainability audit of this reusable micro-SaaS starter.
@@ -759,16 +876,16 @@ After fixes, run:
 Review the final git diff and summarize all changes.
 ```
 
-# Stage 8: Final template validation
+## Stage 8: Final template validation
 
-## Settings
+### Settings
 
 - **Model:** Sonnet.
 - **Thinking:** On.
 - **Effort:** Medium.
 - **Use high** if the build or deployment process fails unexpectedly.
 
-## Prompt
+### Prompt
 
 ```text
 Perform a final release-readiness check for this reusable SaaS template.
@@ -817,46 +934,3 @@ At the end, provide:
 - Known limitations.
 - A recommended tag name such as `v0.1.0-template`.
 ```
-
-# Recommended settings by stage
-
-| Stage                 | Model          | Thinking |      Effort |
-| --------------------- | -------------- | -------: | ----------: |
-| Architecture plan     | Opus           |       On |        High |
-| Foundation            | Sonnet         |       On |      Medium |
-| Supabase auth/RLS     | Sonnet or Opus |       On | Medium–High |
-| Stripe billing        | Opus           |       On |        High |
-| Optional integrations | Sonnet         |       On |  Low–Medium |
-| Testing/docs          | Sonnet         |       On |      Medium |
-| Security review       | Opus           |       On |  High–xhigh |
-| Final validation      | Sonnet         |       On |      Medium |
-
-The thinking toggle is mainly about whether reasoning is displayed; effort is the more important control for how much work Claude performs. High is a strong default for difficult coding tasks, while xhigh is better reserved for long-running or unusually complex work. [platform.claude](https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost)
-
-# Recommended Git checkpoints
-
-Create a commit after each stage:
-
-```bash
-git add .
-git commit -m "stage 1: architecture plan"
-git commit -m "stage 2: project foundation"
-git commit -m "stage 3: Supabase authentication"
-git commit -m "stage 4: Stripe billing"
-git commit -m "stage 5: optional integrations"
-git commit -m "stage 6: testing and documentation"
-git commit -m "stage 7: security review"
-git commit -m "stage 8: final validation"
-```
-
-A safer approach is to commit only after reviewing the diff:
-
-```bash
-git diff --stat
-git diff
-npm run validate
-git add .
-git commit -m "Describe the completed stage"
-```
-
-The crucial improvement is to make every stage have **one purpose, explicit exclusions, acceptance criteria, and verification commands**. That prevents Claude from building an impressive but unnecessarily expensive boilerplate.
