@@ -102,10 +102,15 @@
 - [x] Test `MARKETING_NAV` and `DASHBOARD_NAV` shape, uniqueness, and group isolation
 - [x] Add `tests/setup.ts` to stub env vars — prevents `lib/env.ts` Zod crash at import time in Vitest
 - [x] Configure `vitest.config.ts` `setupFiles` to point to `tests/setup.ts`
+- [x] Add GitHub Actions CI (`/.github/workflows/ci.yml`) — lint, typecheck, test on push/PR to `main`
+- [x] Fix `lib/database.types.ts` (was empty — populated from live Supabase schema)
+- [x] Add `SubscriptionStatus` and `WebhookEventStatus` type aliases to `lib/database.types.ts`
+- [x] Add `description` to `APP_CONFIG` in `lib/config.ts`
 - [ ] Add integration tests for webhook handlers (including transaction rollback scenario)
 - [ ] Create test fixtures for subscription states
 
 **Current test status:** 5 suites, 20 tests, all passing ✅
+**CI status:** Lint ✅ · Typecheck ✅ · Tests ✅
 
 **Acceptance Gate:** All tests pass; coverage matches targets in `CLAUDE.md` §8
 
@@ -113,6 +118,8 @@
 
 #### 3.3 Documentation & Deployment
 
+- [x] `CHANGELOG.md` created
+- [x] `tests/README.md` created
 - [ ] Confirm all `README.md` commands match actual `package.json` scripts
 - [ ] Update `CLAUDE.md` if new conventions were introduced
 - [ ] Deploy to Vercel (`npm run build` must pass cleanly)
