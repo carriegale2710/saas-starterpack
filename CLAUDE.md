@@ -8,15 +8,16 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 
 ## Core Stack (Non-Negotiable)
 
-- **Next.js 14+** with App Router (Server Components by default)
+- **Next.js 15** with App Router (Server Components by default)
 - **TypeScript** in strict mode
 - **Tailwind CSS** for styling
 - **shadcn/ui-style** components (copy-paste, not library)
 - **Supabase PostgreSQL** with Row Level Security
 - **Supabase Auth** (email/password + OAuth)
-- **Stripe** (Checkout, Customer Portal, Webhooks)
+- **Stripe** (Checkout, Customer Portal, Webhooks) — Phase 2
 - **Vercel** for deployment
 - **npm** — do not switch to pnpm or yarn; npm is pre-installed with Node and avoids lockfile conflicts. The lockfile is `package-lock.json` — commit it, never `.gitignore` it.
+- **Node.js 22 LTS** — target runtime. Node 20 is deprecated on Vercel from October 2026. `.nvmrc` pins `22`.
 
 ---
 
@@ -57,20 +58,29 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 │ │ └── webhook.ts
 │ ├── modules/ # Optional modules (opt-in)
 │ ├── config.ts # Central product configuration (includes billing policy)
+│ ├── database.types.ts # Generated from Supabase schema — regenerate after migrations
 │ ├── env.ts # Environment validation (Zod)
 │ └── entitlements.ts # Subscription entitlement logic
 ├── supabase/
 │ └── migrations/
-│ └── 0001_initial.sql # Initial migration — must exist before Stage 3
+│ └── 0001_initial.sql
+├── tests/
+│ ├── setup.ts # Stubs env vars — must stay in sync with lib/env.ts
+│ ├── config.test.ts
+│ ├── entitlements.test.ts
+│ ├── env.test.ts
+│ ├── nav.test.ts
+│ ├── rls.test.ts
+│ └── README.md
 ├── docs/
 │ ├── implementation-plan.md
 │ ├── schema.md
 │ └── decisions.md
-├── tests/
-│ ├── entitlements.test.ts
-│ ├── webhook.test.ts
-│ └── rls.test.ts
+├── .github/
+│ └── workflows/
+│ └── ci.yml # Lint + typecheck + tests on push/PR to main
 ├── .env.example
+├── CHANGELOG.md
 ├── README.md
 └── CLAUDE.md
 ```
@@ -79,6 +89,7 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 
 - Use `lib/` at the project root. Never use `src/lib/` or mix the two.
 - The webhook event log table is named `webhook_events` everywhere — in SQL, code, and docs. Never use `stripe_events`.
+- Nav links (`MARKETING_NAV`, `DASHBOARD_NAV`) live in `lib/config.ts` — single source of truth. Never duplicate them in component files.
 
 ### 2. Security Constraints
 
@@ -162,7 +173,7 @@ export const BILLING_CONFIG = {
 } as const;
 ```
 
-`lib/entitlements.ts` reads this value — never hard-code the `past_due` rule inline. The safest default is `false` (no access).
+`lib/entitlements.ts` reads `BILLING_CONFIG.pastDueGracePeriod` — never hard-code the `past_due` rule inline. The safest default is `false` (no access).
 
 ### 4. Scope Boundaries
 
@@ -217,37 +228,39 @@ All Supabase and Stripe code **MUST** be isolated in `lib/vendor/`.
 
 ### 6. Environment Validation
 
-```typescript
-// lib/env.ts
-import { z } from "zod";
+`lib/env.ts` uses Zod to validate all required env vars at startup. The schema currently validates Phase 1 vars only. Phase 2 will add Stripe vars.
 
+**Phase 1 schema (current):**
+
+```typescript
 const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  NEXT_PUBLIC_APP_URL: z.string().url(),
+});
+```
+
+**Phase 2 additions (to be added with Stripe work):**
+
+```typescript
   STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_"),
   STRIPE_PRICE_ID_PRO: z.string().startsWith("price_"),
   STRIPE_API_VERSION: z.string().min(1),
-  NEXT_PUBLIC_APP_URL: z.string().url(),
-});
-
-export const env = envSchema.parse(process.env);
 ```
 
-**Validation runs on:**
+**Validation runs on:** `npm run dev`, `npm run build`, Vercel deployment.
 
-- `npm run dev`
-- `npm run build`
-- Vercel deployment (via `vercel.json` prebuild script)
+**`tests/setup.ts` rule:** if `lib/env.ts` adds a new required variable, add a matching stub in `tests/setup.ts`. Never put real keys there.
 
 ### 7. Stripe SDK & API Version Pinning
 
 Pin **both** the Node SDK version in `package.json` and the API version string in `.env.local`. Upgrade them together and run the full test suite before deploying.
 
 ```json
-// package.json — pin a specific major version
-"stripe": "16.x"
+// package.json — pin an exact version, not a range
+"stripe": "16.3.0"
 ```
 
 ```bash
@@ -267,9 +280,45 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
 
 **Never** read `apiVersion` from `process.env` directly in the Stripe constructor — always go through the validated `env` object.
 
-### 8. Testing Strategy
+### 8. Database Types
 
-**Framework:** Vitest (lightweight, fast)
+`lib/database.types.ts` is generated from the live Supabase schema. Regenerate it after every migration:
+
+```bash
+npx supabase gen types typescript --project-id <project-ref> > lib/database.types.ts
+```
+
+The file also exports convenience type aliases — keep them in sync when the schema changes:
+
+```typescript
+export type SubscriptionStatus = Database['public']['Enums']['subscription_status'];
+export type WebhookEventStatus = Database['public']['Enums']['webhook_event_status'];
+```
+
+Never leave `lib/database.types.ts` empty or with placeholder types — CI will catch the type errors.
+
+### 9. Nav Links
+
+`MARKETING_NAV` and `DASHBOARD_NAV` are exported from `lib/config.ts`. They are the **single source of truth** for all navigation.
+
+- Components must import from `lib/config.ts`, never define their own nav arrays
+- `nav.test.ts` asserts shape, label uniqueness, and group isolation — update it if the nav shape changes
+
+### 10. Testing Strategy
+
+**Framework:** Vitest (lightweight, fast, native ESM)
+
+**Setup file:** `tests/setup.ts` stubs all env vars required by `lib/env.ts` so imports don't crash. Configured via `vitest.config.ts` `setupFiles`.
+
+**Current test suite (all passing ✅):**
+
+| File | Covers |
+|---|---|
+| `tests/config.test.ts` | `APP_CONFIG` and `BILLING_CONFIG` shape |
+| `tests/entitlements.test.ts` | Access logic for all subscription statuses |
+| `tests/env.test.ts` | Zod env schema — accepts valid, rejects invalid |
+| `tests/nav.test.ts` | Nav shape, label uniqueness, group isolation |
+| `tests/rls.test.ts` | RLS policy documentation tests |
 
 **Coverage Targets:**
 
@@ -278,43 +327,19 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
 - Entitlement logic: 100%
 - RLS policies: 80%
 
-**Test Structure:**
+**Phase 2 planned tests:** `webhook.test.ts`, `billing.test.ts`, `tests/fixtures/`.
 
-```text
-tests/
-├── entitlements.test.ts
-├── webhook.test.ts
-├── rls.test.ts
-└── fixtures/
-├── subscriptions.ts
-└── webhook-events.ts
-```
+### 11. CI
 
-```typescript
-// tests/entitlements.test.ts
-import { describe, it, expect } from "vitest";
-import { hasActiveSubscription } from "@/lib/entitlements";
+GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push and PR to `main`:
 
-describe("hasActiveSubscription", () => {
-  it("returns true for active subscription", () => {
-    expect(hasActiveSubscription({ status: "active" })).toBe(true);
-  });
+1. `npm run lint`
+2. `npm run typecheck` (`tsc --noEmit`)
+3. `npm test`
 
-  it("returns false for past_due when grace period is disabled", () => {
-    expect(hasActiveSubscription({ status: "past_due" })).toBe(false);
-  });
+All three must pass before merging. Do not bypass CI.
 
-  it("returns false for canceled subscription", () => {
-    expect(hasActiveSubscription({ status: "canceled" })).toBe(false);
-  });
-
-  it("returns false for no subscription", () => {
-    expect(hasActiveSubscription(null)).toBe(false);
-  });
-});
-```
-
-### 9. Deployment Strategy
+### 12. Deployment Strategy
 
 **Platform:** Vercel (free tier sufficient for MVP)
 
@@ -351,6 +376,7 @@ describe("hasActiveSubscription", () => {
 | Stripe API version drift  | Pin SDK + API version together, test on upgrade |
 | Vendor lock-in (Supabase) | Standard SQL, exportable data                   |
 | Vercel cold starts        | Pro tier, optimize bundle size                  |
+| Node.js deprecation       | Target Node 22 LTS; Node 20 deprecated Oct 2026 |
 
 ---
 

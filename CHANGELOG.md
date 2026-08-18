@@ -7,22 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Added
-- GitHub Actions CI workflow (`.github/workflows/ci.yml`) — runs lint, typecheck, and Vitest on every push and PR to `main`
-- `tests/README.md` — documents test suite structure, setup, and conventions
-
-### Fixed
-- `lib/database.types.ts` was empty (0 bytes) — populated with types generated from live Supabase schema (`profiles`, `subscriptions`, `webhook_events`)
-- Added `SubscriptionStatus` and `WebhookEventStatus` convenience type aliases to `lib/database.types.ts` — resolves `TS2305` in `lib/entitlements.ts`
-- Added `description` field to `APP_CONFIG` in `lib/config.ts` — resolves `TS2339` in `app/(marketing)/page.tsx` and `app/layout.tsx`
+_Nothing yet — Phase 2 (Stripe) work begins next._
 
 ---
 
 ## [0.1.0] — 2026-08-19
 
-### Phase 1 complete — Foundation
+Phase 1 complete. Foundation is stable, all tests passing, CI green.
 
-#### Added
+### Added
 - Next.js 15 App Router project with TypeScript strict mode
 - Tailwind CSS + shadcn/ui-style component system
 - Supabase integration: browser client, server client, SSR middleware
@@ -33,19 +26,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `SignOutButton` wired into `DashboardNav`
 - `APP_CONFIG`, `BILLING_CONFIG`, `MARKETING_NAV`, `DASHBOARD_NAV` exported from `lib/config.ts`
 - `lib/entitlements.ts` — `hasActiveSubscription()` and `requireActiveSubscription()` with `BILLING_CONFIG.pastDueGracePeriod` policy
-- Vitest test suite: 5 suites, 20 tests, all passing
+- `lib/database.types.ts` — generated from live Supabase schema; includes `SubscriptionStatus` and `WebhookEventStatus` type aliases
+- GitHub Actions CI workflow (`.github/workflows/ci.yml`) — lint, typecheck, tests on every push/PR to `main`
+- Vitest test suite: 5 suites, 20 tests, all passing ✅
   - `tests/config.test.ts` — APP_CONFIG and BILLING_CONFIG shape
   - `tests/entitlements.test.ts` — access logic for all subscription statuses
   - `tests/env.test.ts` — Zod env schema validation
   - `tests/nav.test.ts` — nav array shape, uniqueness, group isolation
   - `tests/rls.test.ts` — RLS policy documentation tests
 - `tests/setup.ts` — env var stubs so `lib/env.ts` doesn't crash at Vitest import time
+- `tests/README.md` — test suite documentation
 - `.env.example` with all required variables
+- `CHANGELOG.md`
 - `docs/decisions.md` — 15 ADRs covering architecture, tooling, and conventions
 - `docs/implementation-plan.md` — phased build plan with acceptance gates
 - `docs/schema.md` — full database schema documentation
 
-#### Architecture decisions recorded
+### Architecture decisions recorded
 - ADR-1: Modular monolith (no microservices)
 - ADR-2: Supabase managed PostgreSQL with RLS
 - ADR-3: Stripe webhooks as source of truth

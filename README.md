@@ -6,35 +6,39 @@ A minimal, maintainable modular monolith for solo-founder subscription SaaS prod
 
 ## Features
 
+### Phase 1 — Complete ✅
 - ✅ Public marketing page
 - ✅ Authentication (Supabase Auth)
 - ✅ Protected dashboard
 - ✅ User profile management
 - ✅ Supabase PostgreSQL with RLS
-- ✅ Stripe Checkout + Customer Portal
-- ✅ Stripe webhook synchronization
-- ✅ Subscription entitlements
-- ✅ Environment validation
-- ✅ Basic tests (Vitest)
+- ✅ Environment validation (Zod)
+- ✅ Unit test suite (Vitest — 5 suites, 20 tests, all passing)
+- ✅ GitHub Actions CI (lint, typecheck, tests)
+
+### Phase 2 — In Progress 🔜
+- ⬜ Stripe Checkout + Customer Portal
+- ⬜ Stripe webhook synchronisation
+- ⬜ Subscription entitlements
 
 ## Tech Stack
 
-- **Framework:** Next.js 14+ (App Router)
+- **Framework:** Next.js 15 (App Router)
 - **Language:** TypeScript (strict mode)
 - **Styling:** Tailwind CSS + shadcn/ui-style components
 - **Database:** Supabase PostgreSQL
 - **Auth:** Supabase Auth
-- **Billing:** Stripe (Checkout, Portal, Webhooks)
+- **Billing:** Stripe (Checkout, Portal, Webhooks) — Phase 2
 - **Deployment:** Vercel
 
 ## Quick Start
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22 LTS (see `.nvmrc`)
 - npm (comes pre-installed with Node; no additional package manager needed)
 - Supabase account (free tier)
-- Stripe account (test mode)
+- Stripe account (test mode) — Phase 2
 - Vercel account (free tier)
 
 ### 1. Clone & Install
@@ -54,19 +58,19 @@ cp .env.example .env.local
 Edit `.env.local` with your credentials:
 
 ```bash
-# Supabase
+# Supabase (required now)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key  # Server-side only
 
-# Stripe
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_ID_PRO=price_...
-STRIPE_API_VERSION=2024-06-20  # Pinned — change only after deliberate upgrade
-
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Stripe (required in Phase 2)
+# STRIPE_SECRET_KEY=sk_test_...
+# STRIPE_WEBHOOK_SECRET=whsec_...
+# STRIPE_PRICE_ID_PRO=price_...
+# STRIPE_API_VERSION=2024-06-20
 ```
 
 ### 3. Supabase Setup
@@ -81,27 +85,29 @@ npx supabase login
 # Link to your project
 npx supabase link --project-ref your-project-ref
 
-# Apply migrations (includes initial migration at supabase/migrations/0001_initial.sql)
+# Apply migrations
 npx supabase db push
 ```
 
-### 4. Stripe Setup
+### 4. Run Development Server
 
-#### 4.1 Create Products & Prices
+```bash
+npm run dev
+```
+
+Open http://localhost:3000
+
+### 5. Stripe Setup (Phase 2)
+
+#### 5.1 Create Products & Prices
 
 In Stripe Dashboard: **Products → Add product**, create "Pro Plan" with monthly price, copy price ID to `STRIPE_PRICE_ID_PRO`.
 
-#### 4.2 Pin the Stripe Node SDK
+#### 5.2 Pin the Stripe Node SDK
 
-The `package.json` pins a specific Stripe SDK version alongside the API version:
+Pin both the SDK version in `package.json` and the API version in `.env.local`. See [Stripe SDK & API Version Pinning](#stripe-sdk--api-version-pinning).
 
-```json
-"stripe": "16.x"
-```
-
-Both the SDK version and `STRIPE_API_VERSION` must be updated together and tested before deploying.
-
-#### 4.3 Configure Webhooks
+#### 5.3 Configure Webhooks
 
 In Stripe Dashboard: **Developers → Webhooks**, add endpoint `https://your-domain.com/api/stripe/webhook` with these events:
 
@@ -113,14 +119,6 @@ In Stripe Dashboard: **Developers → Webhooks**, add endpoint `https://your-dom
 - `invoice.payment_failed`
 
 Copy the webhook signing secret to `STRIPE_WEBHOOK_SECRET`.
-
-### 5. Run Development Server
-
-```bash
-npm run dev
-```
-
-Open http://localhost:3000
 
 ### 6. Deploy to Vercel
 
@@ -181,7 +179,7 @@ All tables have RLS enabled. The **service-role key bypasses RLS entirely** — 
 5. Enters new password
 6. Redirect to `/login`
 
-## Stripe Integration
+## Stripe Integration (Phase 2)
 
 ### Checkout Flow
 
@@ -232,28 +230,33 @@ WHERE status = 'processing'
 
 Add `updated_at` to `webhook_events` to enable this query (see `docs/schema.md`).
 
-## Entitlement Rules
+## Entitlement Rules (Phase 2)
 
-Entitlement policy is defined in `lib/config.ts` and enforced in `lib/entitlements.ts`. The **default policy** for this template is:
+Entitlement policy is defined in `lib/config.ts` (`BILLING_CONFIG.pastDueGracePeriod`) and enforced in `lib/entitlements.ts`. The **default policy** for this template is:
 
-| Status                             | Access Level                                                                           |
-| ---------------------------------- | -------------------------------------------------------------------------------------- |
-| `active`, `trialing`               | Full access                                                                            |
-| `past_due`                         | **No access** (deny by default — change in `lib/config.ts` if you want a grace period) |
-| `canceled`, `unpaid`, `incomplete` | No access                                                                              |
-| No subscription                    | No access (deny by default)                                                            |
-
-To enable a grace period for `past_due`, set `BILLING_PAST_DUE_GRACE = true` in `lib/config.ts`. This is a **product decision**, not a default.
+| Status                             | Access Level                                                                                       |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `active`, `trialing`               | Full access                                                                                        |
+| `past_due`                         | **No access** (deny by default — set `pastDueGracePeriod: true` in `lib/config.ts` for a grace period) |
+| `canceled`, `unpaid`, `incomplete` | No access                                                                                          |
+| No subscription                    | No access (deny by default)                                                                        |
 
 ## Testing
 
+See [`tests/README.md`](tests/README.md) for full details.
+
 ```bash
-npm test
-npm run test:coverage
-npm test -- subscription.test.ts
+npm test              # run all tests once
+npm run test:watch    # watch mode
+npm run test:coverage # coverage report
 ```
 
-### Test Coverage Targets
+### Current Status
+
+5 suites · 20 tests · all passing ✅  
+CI: Lint ✅ · Typecheck ✅ · Tests ✅
+
+### Coverage Targets
 
 - Authentication flow: 100%
 - Webhook handlers: 90%
@@ -262,18 +265,23 @@ npm test -- subscription.test.ts
 
 ## Environment Variables
 
-### Required
+### Required (Phase 1)
 
 | Variable                        | Description                         |
 | ------------------------------- | ----------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL                |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (client)          |
 | `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service role (server only) |
-| `STRIPE_SECRET_KEY`             | Stripe secret key (test or live)    |
-| `STRIPE_WEBHOOK_SECRET`         | Stripe webhook signing secret       |
-| `STRIPE_PRICE_ID_PRO`           | Stripe price ID for Pro plan        |
-| `STRIPE_API_VERSION`            | Pinned Stripe API version string    |
 | `NEXT_PUBLIC_APP_URL`           | App URL (for redirects)             |
+
+### Required (Phase 2 — Stripe)
+
+| Variable                        | Description                              |
+| ------------------------------- | ---------------------------------------- |
+| `STRIPE_SECRET_KEY`             | Stripe secret key (test or live)         |
+| `STRIPE_WEBHOOK_SECRET`         | Stripe webhook signing secret            |
+| `STRIPE_PRICE_ID_PRO`           | Stripe price ID for Pro plan             |
+| `STRIPE_API_VERSION`            | Pinned Stripe API version string         |
 
 ### Optional
 
@@ -288,8 +296,8 @@ npm test -- subscription.test.ts
 Pin **both** the SDK version in `package.json` and the API version in `.env.local`. They must be upgraded together:
 
 ```json
-// package.json
-"stripe": "16.x"
+// package.json — pin exact version, not a range
+"stripe": "16.3.0"
 ```
 
 ```bash
