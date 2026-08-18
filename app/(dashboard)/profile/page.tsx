@@ -1,24 +1,26 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/vendor/supabase/server';
+import { ProfileForm } from '@/components/dashboard/profile-form';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Profile' };
 
-export default function ProfilePage() {
+export default async function ProfilePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Profile</h1>
-        <p className="text-muted-foreground">Manage your account settings</p>
-      </div>
-      <Card className="max-w-lg">
-        <CardHeader>
-          <CardTitle>Account details</CardTitle>
-          <CardDescription>Profile management connected in Stage 3</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Your profile information will appear here after Stage 3.</p>
-        </CardContent>
-      </Card>
+    <div className="mx-auto max-w-2xl">
+      <h1 className="mb-6 text-2xl font-semibold">Profile</h1>
+      <ProfileForm profile={profile} />
     </div>
   );
 }

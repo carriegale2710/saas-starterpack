@@ -1,17 +1,17 @@
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/vendor/supabase/server';
 import { DashboardNav } from '@/components/dashboard/dashboard-nav';
-import { UnauthorizedMessage } from '@/components/shared/unauthorized';
 
-// TODO Stage 3: replace this placeholder with real session check via Supabase
-const IS_AUTHENTICATED_PLACEHOLDER = false;
-
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Stage 3 will replace this with: const session = await getServerSession()
-  if (IS_AUTHENTICATED_PLACEHOLDER) {
-    return <UnauthorizedMessage />;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login');
   }
 
   return (
