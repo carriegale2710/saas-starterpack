@@ -411,6 +411,14 @@ Use lib/ at the project root. Do not create src/lib/.
 
 ## Constraints
 
+- Next.js version: 15 (current stable). Use create-next-app@latest.
+- Do NOT use --src-dir flag. All code at root: app/, lib/, components/.
+- params, searchParams, cookies(), headers() are all async in Next.js 15 — always await them.
+- fetch() is uncached by default. Do not rely on implicit caching.
+- Turbopack is default for next dev — no need to add --turbo flag explicitly.
+- shadcn/ui CLI: npx shadcn@latest init (not shadcn-ui)
+- Node.js target: 22 LTS. Add engines.node >=22.0.0 to package.json.
+- npm only. Generates package-lock.json. No pnpm-lock.yaml or yarn.lock.
 - Keep product names, URLs, branding, and feature flags centralized
 - Do not hard-code product-specific values
 - Keep the UI product-neutral
@@ -426,6 +434,13 @@ Use lib/ at the project root. Do not create src/lib/.
 Run formatting, lint, type checking, and a production build.
 
 At the end, report files changed, commands run, assumptions, known limitations, and the recommended next phase.
+
+This project uses Next.js 15. Apply these patterns:
+- await params and searchParams in all layouts, pages, and route handlers
+- await cookies() and headers() everywhere
+- fetch() is not cached by default — add cache: 'force-cache' only when explicitly needed
+- GET Route Handlers are dynamic by default
+- Turbopack is the default dev bundler (next dev runs Turbopack)
 ```
 
 ## Local Verification

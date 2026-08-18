@@ -110,6 +110,11 @@ The `past_due` status represents a payment that is failing but not yet definitiv
 - All routes in `/app/`
 - Server Components by default (`'use client'` when needed)
 - Middleware for auth checks
+- Next.js 15 is the current version
+- `params`, `searchParams`, `cookies()`, and `headers()` are async — always `await` them
+- `fetch()` and GET Route Handlers are uncached by default — opt in with `cache: 'force-cache'`
+- Turbopack is the default dev bundler (`next dev` uses Turbopack)
+- Target Node.js 22 LTS; Node.js 20 is deprecated on Vercel from October 2026
 
 ---
 
@@ -122,6 +127,8 @@ The `past_due` status represents a payment that is failing but not yet definitiv
 - Queries use `supabase.from('table').select()`
 - Types generated via `npx supabase gen types typescript`
 - No migration tool (use Supabase CLI)
+- Use Node.js 22 LTS (`engines.node: ">=22.0.0"` in `package.json`)
+- `create-next-app@latest` without `--src-dir` generates root-level `app/`, `lib/`, `components/` — do not pass `--src-dir`
 
 ---
 
