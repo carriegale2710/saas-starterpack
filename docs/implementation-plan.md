@@ -45,7 +45,7 @@
 
 #### 2.1 Stripe Integration
 
-- [ ] Install `stripe` SDK — **pin to a specific major version** in `package.json` (e.g. `"stripe": "16.x"`)
+- [ ] Install `stripe` SDK — **pin to an exact version** in `package.json` (e.g. `"stripe": "16.3.0"`, not `"16.x"`). Exact pinning prevents silent patch/minor changes. See `docs/decisions.md` #12.
 - [ ] Set `STRIPE_API_VERSION` in `.env.example` and validate in `lib/env.ts`
 - [ ] Create `/api/stripe/checkout` endpoint
 - [ ] Build pricing page with plan selection
@@ -99,7 +99,7 @@
 - [ ] Test RLS policies with Supabase test helpers
 - [ ] Create test fixtures for subscription states
 
-**Acceptance Gate:** All tests pass; coverage > 70% for critical paths (auth, billing, entitlements)
+**Acceptance Gate:** All tests pass; coverage matches targets in `CLAUDE.md` §8 (100% auth, 100% entitlements, 90% webhooks, 80% RLS). The flat 70% figure is a minimum floor, not the target.
 
 ---
 

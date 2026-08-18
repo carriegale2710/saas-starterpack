@@ -172,17 +172,24 @@ ALTER TABLE webhook_events ENABLE ROW LEVEL SECURITY;
 
 ## Atomic Webhook Processing
 
-The webhook handler must execute the claim, subscription upsert, and status update atomically:
+The webhook handler uses a two-step approach: insert-on-arrival (idempotent), then claim-and-process.
 
 ```sql
--- Step 1: Claim (outside transaction — fast path)
+-- Step 1: Insert on arrival (INSERT ... ON CONFLICT DO NOTHING)
+-- This is the idempotency gate — duplicate deliveries from Stripe are silently ignored.
+INSERT INTO webhook_events (stripe_event_id, event_type, status, payload)
+VALUES ($1, $2, 'pending', $3)
+ON CONFLICT (stripe_event_id) DO NOTHING;
+-- If 0 rows inserted: duplicate event — return 200 immediately, do nothing.
+
+-- Step 2: Claim (atomic update, outside transaction)
 UPDATE webhook_events
 SET status = 'processing', attempts = attempts + 1
 WHERE stripe_event_id = $1 AND status = 'pending'
 RETURNING id;
--- If no row returned: already claimed, return 200 immediately.
+-- If no row returned: already claimed by another worker — return 200 immediately.
 
--- Step 2: Process (inside transaction)
+-- Step 3: Process (inside transaction)
 BEGIN;
   -- Upsert subscription state
   INSERT INTO subscriptions (...) VALUES (...)
@@ -193,7 +200,7 @@ BEGIN;
   SET status = 'processed', processed_at = NOW()
   WHERE id = $event_row_id;
 COMMIT;
--- On any error: ROLLBACK — event reverts to 'processing' for recovery.
+-- On any error: ROLLBACK — event stays 'processing' and is recovered by stale-reset.
 ```
 
 **Stale-processing recovery** (run on a schedule or manually):
@@ -204,6 +211,22 @@ SET status = 'pending', error_message = 'reset after stale processing'
 WHERE status = 'processing'
   AND updated_at < NOW() - INTERVAL '10 minutes';
 ```
+
+---
+
+## Entitlement-Controlling Events
+
+These are the Stripe event types that trigger a subscription upsert and directly control access:
+
+| Event                           | What it signals                               |
+| ------------------------------- | --------------------------------------------- |
+| `checkout.session.completed`    | Initial subscription created                  |
+| `customer.subscription.updated` | Plan change, renewal, status change           |
+| `customer.subscription.deleted` | Cancellation                                  |
+| `invoice.paid`                  | Successful payment — confirms `active` status |
+| `invoice.payment_failed`        | Failed payment — triggers `past_due`          |
+
+All other event types are logged to `webhook_events` and acknowledged (200) without a subscription upsert. Unknown types must never crash the handler.
 
 ---
 

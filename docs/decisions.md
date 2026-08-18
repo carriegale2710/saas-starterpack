@@ -61,7 +61,9 @@ The `past_due` status represents a payment that is failing but not yet definitiv
 | Deny access (default) | User loses access immediately on `invoice.payment_failed` | Safest; simplest; correct for most products                   |
 | Grace period          | User retains limited or full access while Stripe retries  | Only if users cannot afford an interruption (e.g. team tools) |
 
-**Template default:** deny access (`BILLING_CONFIG.pastDueGracePeriod = false` in `lib/config.ts`). This is a **product decision** — change it consciously, not by accident.
+**Template default:** `BILLING_CONFIG.pastDueGracePeriod = false` in `lib/config.ts` — deny access immediately on `past_due`. This is a **product decision**; change it consciously. See `docs/schema.md` Entitlement Logic for the full status table.
+
+**Entitlement-controlling events:** `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`. See `docs/schema.md` for the full event table.
 
 ---
 
@@ -82,6 +84,8 @@ The `past_due` status represents a payment that is failing but not yet definitiv
 - Atomic claim: `UPDATE ... WHERE status = 'pending' RETURNING id`
 - **Transaction boundary:** the subscription upsert and `status = 'processed'` update execute in the same database transaction. A crash cannot leave a permanently misleading `processing` row — the transaction rolls back and the event is recovered by a stale-processing reset (timeout-based, see README)
 - Failed events retry with exponential backoff (optional cron)
+- **Canonical event list and INSERT pattern:** see `docs/schema.md` — Atomic Webhook Processing
+- **Stale recovery query:** see `README.md` — Webhook Atomicity & Stale-Processing Recovery
 
 ---
 
@@ -219,14 +223,10 @@ export type { <ModuleType> };
 
 ---
 
+##
+
 ## Non-Goals (Explicitly Out of Scope)
 
-- Multi-tenant workspaces or teams
-- Usage-based billing (metered events)
-- File uploads (Supabase Storage)
-- Email sending (Resend)
-- Analytics (PostHog) or error tracking (Sentry)
-- AI/LLM integrations
 - Background job queues (separate service)
 - Microservices or separate backend
 - GraphQL, Redux, Prisma, Drizzle, Docker

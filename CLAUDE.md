@@ -16,7 +16,7 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 - **Supabase Auth** (email/password + OAuth)
 - **Stripe** (Checkout, Customer Portal, Webhooks)
 - **Vercel** for deployment
-- **npm** — do not switch to pnpm or yarn; npm is pre-installed with Node and avoids lockfile conflicts
+- **npm** — do not switch to pnpm or yarn; npm is pre-installed with Node and avoids lockfile conflicts. The lockfile is `package-lock.json` — commit it, never `.gitignore` it.
 
 ---
 
@@ -125,6 +125,18 @@ CREATE POLICY "Users can read own profile"
 - Validate webhook signatures with `stripe.webhooks.constructEvent()`
 - Log all events to `webhook_events` table (idempotency)
 
+#### Entitlement-Controlling Stripe Events
+
+Only these events trigger a subscription upsert:
+
+- `checkout.session.completed`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid` — confirms `active` status after successful payment
+- `invoice.payment_failed` — moves status to `past_due`
+
+All other event types must be logged and acknowledged without crashing. Never reject unknown event types with a non-200 response.
+
 #### Webhook Transaction Boundary
 
 The event state update (`status = 'processed'`) and the subscription upsert **must execute in the same database transaction**. A crash must never leave a permanently misleading `processing` row. Use a transaction wrapper:
@@ -157,7 +169,7 @@ export const BILLING_CONFIG = {
 #### Core Features (Mandatory)
 
 - Public marketing page (`/`)
-- Authentication (`/login`, `/signup`, `/auth/callback`)
+- Authentication (`/login`, `/signup`) and OAuth callback (`/auth/callback` — exchanges the code for a session via `supabase.auth.exchangeCodeForSession()`, then redirects to `/dashboard`)
 - Password recovery (`/forgot-password`, `/reset-password`)
 - Protected dashboard (`/dashboard`)
 - User profile (`/profile`)

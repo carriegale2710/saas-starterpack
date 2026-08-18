@@ -325,21 +325,21 @@ Before finishing, identify contradictions and unnecessary complexity, and ask no
 
 After Stage 1 is complete, verify that the documentation includes:
 
-- npm-only commands and `package-lock.json`
-- `lib/` used consistently; no `src/lib/`
-- `webhook_events` used consistently; no `stripe_events`
-- Atomic webhook claiming with `INSERT ... ON CONFLICT DO NOTHING`
-- Explicit `pending`, `processing`, `processed`, and `failed` states
-- Subscription upsert and event status update in one transaction
-- Stale-processing recovery using `updated_at`
-- `invoice.paid` in the entitlement-controlling event set
-- `past_due` defaulting to no access through `lib/config.ts`
-- Service-role bypassing RLS without an `auth.uid() IS NULL` policy
-- Password recovery request and callback flows
-- `updated_at`, constraints, and unknown-status handling
-- `supabase/migrations/0001_initial.sql`
-- Module schema-impact warnings
-- Documentation split across all required files
+- [x] npm-only commands and `package-lock.json`
+- [x] `lib/` used consistently; no `src/lib/`
+- [x] `webhook_events` used consistently; no `stripe_events`
+- [x] Atomic webhook claiming with `INSERT ... ON CONFLICT DO NOTHING`
+- [x] Explicit `pending`, `processing`, `processed`, and `failed` states
+- [x] Subscription upsert and event status update in one transaction
+- [x] Stale-processing recovery using `updated_at`
+- [x] `invoice.paid` in the entitlement-controlling event set
+- [x] `past_due` defaulting to no access through `lib/config.ts`
+- [x] Service-role bypassing RLS without an `auth.uid() IS NULL` policy
+- [x] Password recovery request and callback flows
+- [x] `updated_at`, constraints, and unknown-status handling
+- [x] `supabase/migrations/0001_initial.sql`
+- [x] Module schema-impact warnings
+- [x] Documentation split across all required files
 
 ## Checkpoint
 
