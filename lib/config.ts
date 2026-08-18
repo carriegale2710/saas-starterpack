@@ -7,6 +7,7 @@ import { env } from '@/lib/env';
 
 export const APP_CONFIG = {
   name: 'SaaS Starter',
+  description: 'The fastest way to build and ship your SaaS. Auth, billing, and database — all included.',
   url: env.NEXT_PUBLIC_APP_URL,
   supportEmail: 'support@example.com',
 } as const;
