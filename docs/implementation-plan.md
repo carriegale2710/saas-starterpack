@@ -50,11 +50,11 @@
 
 #### 1.4 Testing & CI
 
-- [x] Add `tests/setup.ts` — stubs env vars so `lib/env.ts` doesn’t crash at Vitest import time
+- [x] Add `tests/setup.ts` — stubs env vars so `lib/env.ts` doesn't crash at Vitest import time
 - [x] Write unit tests: `config`, `entitlements`, `env`, `nav`, `rls` — 5 suites, 20 tests, all passing
 - [x] Configure `vitest.config.ts` `setupFiles` to point to `tests/setup.ts`
 - [x] Add GitHub Actions CI (`.github/workflows/ci.yml`) — 3 parallel jobs: validate, build, test+coverage
-- [x] Add `tests/fixtures/subscriptions.ts` — typed fixtures for all 8 subscription statuses
+- [x] Add `tests/fixtures/subscriptions.ts` — typed fixtures for all 7 DB subscription statuses
 - [x] Add `tests/fixtures/webhook-events.ts` — Stripe event payloads for all 5 entitlement-controlling events + ignored events
 - [x] Add `tests/webhook.test.ts` — skeleton: idempotency, event routing, stale-processing recovery contracts
 - [x] Add `tests/billing.test.ts` — skeleton: checkout contract, fixture coverage, `BILLING_CONFIG` policy
@@ -63,6 +63,16 @@
 **CI status:** Lint ✅ · Typecheck ✅ · Build ✅ · Tests ✅
 
 **Acceptance Gate:** All tests pass; CI green on push/PR to main ✅
+
+---
+
+#### 1.5 Manual Verification — COMPLETE ✅
+
+- [x] `webhook_events` inaccessible to authenticated users — **verified 2026-08-19**
+  - RLS enabled (`relrowsecurity: true` on `pg_class`)
+  - Zero authenticated-user policies (`pg_policies` returns 0 rows)
+  - Deny-by-default confirmed
+- [ ] Service-role write to `webhook_events` works server-side — **deferred to Phase 2.2 gate** (requires webhook handler)
 
 ---
 
@@ -94,6 +104,7 @@
 - [ ] Handle all 5 entitlement-controlling events (see `tests/fixtures/webhook-events.ts`)
 - [ ] Log unknown event types without crashing (return 200)
 - [ ] Activate commented assertions in `tests/webhook.test.ts` as handler is built
+- [ ] **Verify service-role client can write to `webhook_events`** ← Phase 1 deferred gate
 
 **Acceptance Gate:** Valid events processed atomically; invalid signatures return 400; stale `processing` rows reset via documented query; retries succeed after simulated failure
 
