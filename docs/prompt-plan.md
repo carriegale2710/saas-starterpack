@@ -591,12 +591,12 @@ npm test
 
 Manual checks:
 
-- Sign up, log in, log out, and reset password
-- Access `/dashboard` while logged out
-- Access `/dashboard` while logged in
-- Confirm a user cannot access another user's profile
-- Confirm `webhook_events` is inaccessible to authenticated users
-- Confirm service-role operations work server-side
+- [x] Sign up, log in, log out, and reset password
+- [x] Access `/dashboard` while logged out -> No, redirects to login
+- [x] Access `/dashboard` while logged in
+- [x] Confirm a user cannot access another user's profile
+- [ ] Confirm `webhook_events` is inaccessible to authenticated users
+- [ ] Confirm service-role operations work server-side
 
 ## Checkpoint
 
