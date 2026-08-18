@@ -232,6 +232,53 @@ export type { <ModuleType> };
 
 ---
 
+## 14. Nav Links in `lib/config.ts` (Not Hardcoded in Components)
+
+**Decision:** Export `MARKETING_NAV` and `DASHBOARD_NAV` from `lib/config.ts` as typed arrays; components consume them via `.map()`
+
+**Context:** During Stage 3 build, `marketing-nav.tsx` and `dashboard-nav.tsx` both imported nav link arrays from `lib/config.ts`. The config file was rewritten during Stage 3 and both exports were accidentally dropped, causing runtime crashes (`Cannot read properties of undefined (reading 'map')`).
+
+**Alternatives Considered:**
+
+| Alternative | Pros | Cons | Verdict |
+|---|---|---|---|
+| Hardcode links in each nav component | Simple | Duplicated, drift-prone | Rejected |
+| Separate `lib/nav.ts` file | Clean separation | Extra file for small data | Rejected — `lib/config.ts` is already the central config |
+| `lib/config.ts` exports | Single source of truth, testable | Must not be dropped in rewrites | Accepted |
+
+**Consequences:**
+
+- `MARKETING_NAV` and `DASHBOARD_NAV` are typed `{ label: string; href: string }[]`
+- Both exported from `lib/config.ts` alongside `APP_CONFIG` and `BILLING_CONFIG`
+- Covered by `tests/config.test.ts` (shape) and `tests/nav.test.ts` (uniqueness, group isolation)
+- **Rule:** any rewrite of `lib/config.ts` must preserve these exports or update all importing components atomically
+
+---
+
+## 15. Vitest Environment Setup File for Env Var Stubs
+
+**Decision:** Use `tests/setup.ts` + `vitest.config.ts` `setupFiles` to stub required env vars before any test module is imported
+
+**Context:** `lib/env.ts` calls `envSchema.parse(process.env)` at module load time (top-level, not inside a function). Vitest does not load `.env.local`, so any test file that directly or transitively imports `lib/config.ts` (which imports `lib/env.ts`) would crash with a `ZodError` before a single test ran. This affected `tests/config.test.ts`, `tests/entitlements.test.ts`, and `tests/nav.test.ts`.
+
+**Alternatives Considered:**
+
+| Alternative | Pros | Cons | Verdict |
+|---|---|---|---|
+| `dotenv` in vitest config | Loads real `.env.local` | Real secrets in test env; `.env.local` not committed | Rejected |
+| Mock `lib/env.ts` module per test | Isolated | Boilerplate in every test file | Rejected |
+| Lazy-evaluate `env` (move parse inside function) | No startup crash | Changes production behaviour; env errors surface later | Rejected |
+| `tests/setup.ts` with `process.env` stubs | One file, zero test-file boilerplate, no real secrets | Stubs must be kept in sync with `lib/env.ts` schema | Accepted |
+
+**Consequences:**
+
+- `tests/setup.ts` sets all 4 required env vars to safe non-functional placeholder values
+- `vitest.config.ts` sets `setupFiles: ['./tests/setup.ts']` — runs before every test file
+- `tests/setup.ts` must be updated whenever `lib/env.ts` adds a new required variable
+- Never put real API keys or secrets in `tests/setup.ts`
+
+---
+
 ## Risks & Mitigations
 
 | Risk                      | Likelihood | Impact | Mitigation                                            |
@@ -242,6 +289,7 @@ export type { <ModuleType> };
 | Stripe API version drift  | Medium     | Medium | Pin SDK + API version, test on upgrade                |
 | Vendor lock-in (Supabase) | High       | Medium | Standard SQL, exportable data                         |
 | Vercel cold starts        | Medium     | Low    | Pro tier, optimize bundle size                        |
+| Nav config dropped in rewrite | Low    | High   | Covered by `tests/config.test.ts` + `tests/nav.test.ts` |
 
 ---
 
@@ -255,7 +303,7 @@ export type { <ModuleType> };
 
 ## Implementation Sequence
 
-1. **Phase 1:** Foundation (Next.js, Supabase, Auth) — includes generating `0001_initial.sql`
+1. **Phase 1:** Foundation (Next.js, Supabase, Auth) ✅
 2. **Phase 2:** Billing (Stripe, webhooks, entitlements)
 3. **Phase 3:** Polish (testing, docs, deployment)
 

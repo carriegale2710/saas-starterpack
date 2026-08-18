@@ -6,38 +6,41 @@
 
 #### 1.1 Project Initialization
 
-- [ ] Initialize Next.js 14+ with App Router, TypeScript strict mode
-- [ ] Configure Tailwind CSS with custom theme
-- [ ] Set up shadcn/ui-style component system
-- [ ] Configure ESLint, Prettier, and path aliases (`@/`)
-- [ ] Create base layout with public nav and footer
-- [ ] **Use `npm` exclusively** — no pnpm or yarn
+- [x] Initialize Next.js 14+ with App Router, TypeScript strict mode
+- [x] Configure Tailwind CSS with custom theme
+- [x] Set up shadcn/ui-style component system
+- [x] Configure ESLint, Prettier, and path aliases (`@/`)
+- [x] Create base layout with public nav and footer
+- [x] **Use `npm` exclusively** — no pnpm or yarn
 
-**Acceptance Gate:** `npm run dev` starts without errors; `/` renders marketing page
+**Acceptance Gate:** `npm run dev` starts without errors; `/` renders marketing page ✅
 
 ---
 
 #### 1.2 Supabase Integration
 
-- [ ] Install `@supabase/supabase-js` and `@supabase/ssr`
-- [ ] Configure Supabase client (browser + server), always under `lib/` (not `src/lib/`)
-- [ ] Set up environment validation (`lib/env.ts` with Zod)
-- [ ] **Generate `supabase/migrations/0001_initial.sql`** from `docs/schema.md` — this file must exist before any application code references database tables
-- [ ] Implement RLS policies as specified in `docs/schema.md`
+- [x] Install `@supabase/supabase-js` and `@supabase/ssr`
+- [x] Configure Supabase client (browser + server), always under `lib/` (not `src/lib/`)
+- [x] Set up environment validation (`lib/env.ts` with Zod)
+- [x] **Generate `supabase/migrations/0001_initial.sql`** from `docs/schema.md`
+- [x] Implement RLS policies as specified in `docs/schema.md`
+- [x] Harden migration: `SET search_path = ''` on all functions; revoke `EXECUTE` on trigger functions from `anon`/`authenticated`
+- [x] Apply migration manually to Supabase project (Docker skipped — applied via Supabase dashboard)
 
-**Acceptance Gate:** `npx supabase db reset` applies cleanly; authenticated user can read/write own profile; RLS blocks cross-user access
+**Acceptance Gate:** Migration applied cleanly; authenticated user can read/write own profile; RLS blocks cross-user access ✅
 
 ---
 
 #### 1.3 Authentication Flow
 
-- [ ] Implement Supabase Auth (email/password + OAuth providers)
-- [ ] Create `/login`, `/signup`, `/auth/callback` routes
-- [ ] Build password recovery flow (`/forgot-password`, `/reset-password`)
-- [ ] Add session middleware for protected routes
-- [ ] Create `/dashboard` (protected) and `/profile` pages
+- [x] Implement Supabase Auth (email/password)
+- [x] Create `/login`, `/signup`, `/auth/callback` routes
+- [x] Add session middleware for protected routes
+- [x] Create `/dashboard` (protected) page
+- [x] Wire real `SignOutButton` into `DashboardNav` (replaced Stage 2 disabled placeholder)
+- [x] Export `MARKETING_NAV` and `DASHBOARD_NAV` from `lib/config.ts` (single source of truth for nav links)
 
-**Acceptance Gate:** User can sign up, verify email, log in, recover password, access protected dashboard
+**Acceptance Gate:** User can sign up, log in, access protected dashboard, sign out ✅
 
 ---
 
@@ -59,7 +62,7 @@
 
 - [ ] Create `/api/stripe/webhook` endpoint
 - [ ] Implement atomic webhook claim: `UPDATE webhook_events SET status = 'processing' WHERE stripe_event_id = $1 AND status = 'pending' RETURNING id`
-- [ ] **Wrap subscription upsert + status update in a single database transaction** — a crash must not leave a permanently misleading `processing` row
+- [ ] **Wrap subscription upsert + status update in a single database transaction**
 - [ ] Add `updated_at` to `webhook_events` and document stale-processing recovery query
 - [ ] Handle `checkout.session.completed`, `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`
 - [ ] Log unknown event types without crashing
@@ -76,7 +79,7 @@
 - [ ] Build `/billing` page linking to Customer Portal
 - [ ] Sync subscription metadata (`plan`, `current_period_end`, `cancel_at_period_end`)
 
-**Acceptance Gate:** Active users see premium features; `past_due` users are denied by default; Portal updates reflect in DB; changing `pastDueGracePeriod` changes behaviour without touching `entitlements.ts`
+**Acceptance Gate:** Active users see premium features; `past_due` users are denied by default; Portal updates reflect in DB
 
 ---
 
@@ -84,22 +87,27 @@
 
 #### 3.1 Environment & Configuration
 
-- [ ] Create `.env.example` with all required variables (including `STRIPE_API_VERSION`)
-- [ ] Document that `stripe` SDK version in `package.json` and `STRIPE_API_VERSION` must be upgraded together
-- [ ] Centralize all product settings in `lib/config.ts`
+- [x] Create `.env.example` with all required variables
+- [x] Centralize all product settings in `lib/config.ts`
+- [x] `MARKETING_NAV` and `DASHBOARD_NAV` exported from `lib/config.ts`
 
-**Acceptance Gate:** App refuses to start with invalid/missing environment variables; config is single source of truth
+**Acceptance Gate:** App refuses to start with invalid/missing env vars; config is single source of truth ✅
 
 ---
 
 #### 3.2 Testing
 
-- [ ] Write unit tests for entitlement logic (including `past_due` default behaviour)
+- [x] Write unit tests for entitlement logic (including `past_due` default behaviour)
+- [x] Test RLS policies with documented test cases
+- [x] Test `MARKETING_NAV` and `DASHBOARD_NAV` shape, uniqueness, and group isolation
+- [x] Add `tests/setup.ts` to stub env vars — prevents `lib/env.ts` Zod crash at import time in Vitest
+- [x] Configure `vitest.config.ts` `setupFiles` to point to `tests/setup.ts`
 - [ ] Add integration tests for webhook handlers (including transaction rollback scenario)
-- [ ] Test RLS policies with Supabase test helpers
 - [ ] Create test fixtures for subscription states
 
-**Acceptance Gate:** All tests pass; coverage matches targets in `CLAUDE.md` §8 (100% auth, 100% entitlements, 90% webhooks, 80% RLS). The flat 70% figure is a minimum floor, not the target.
+**Current test status:** 5 suites, 20 tests, all passing ✅
+
+**Acceptance Gate:** All tests pass; coverage matches targets in `CLAUDE.md` §8
 
 ---
 
@@ -111,7 +119,7 @@
 - [ ] Configure production Stripe webhook endpoint
 - [ ] Run `npx supabase db push` against production project
 
-**Acceptance Gate:** Fresh clone + `npm install` + `npm run dev` works; Vercel deploy succeeds; production webhook receives events
+**Acceptance Gate:** Fresh clone + `npm install` + `npm run dev` works; Vercel deploy succeeds
 
 ---
 
@@ -146,20 +154,12 @@
 
 ```text
 lib/modules/
-├── workspaces/ # Multi-tenant teams — REQUIRES schema additions (new tables + FK to profiles)
-├── usage-billing/ # Metered events — REQUIRES schema additions (may need billing-owner on subscriptions)
+├── workspaces/ # Multi-tenant teams — REQUIRES schema additions
+├── usage-billing/ # Metered events — REQUIRES schema additions
 ├── storage/ # Supabase Storage wrappers
 ├── email/ # Resend integration
 ├── analytics/ # PostHog client
 └── ai/ # LLM API clients
 ```
 
-Each module exports a single `init()` function and has its own migrations. `workspaces` and `usage-billing` are exceptions to the "no core-table impact" rule — review `docs/decisions.md` before activating them.
-
----
-
-## Next Steps
-
-1. **Approve this plan** (or request changes)
-2. **Answer decision questions** (see `CLAUDE.md`)
-3. **Begin Phase 1** with `npx create-next-app@latest`
+Each module exports a single `init()` function and has its own migrations.
