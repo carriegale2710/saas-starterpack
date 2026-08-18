@@ -25,6 +25,7 @@ CREATE TYPE public.webhook_event_status AS ENUM (
 
 -- ---------------------------------------------------------------
 -- updated_at trigger helper
+-- SET search_path = '' prevents search_path injection attacks.
 -- ---------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER AS $$
@@ -32,7 +33,7 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = '';
 
 -- ---------------------------------------------------------------
 -- profiles
@@ -66,6 +67,9 @@ CREATE POLICY "Users can update own profile"
   WITH CHECK (auth.uid() = id);
 
 -- Auto-create profile on sign-up
+-- SECURITY DEFINER so it can write to profiles without a user session.
+-- SET search_path = '' prevents search_path injection.
+-- EXECUTE revoked from anon/authenticated: this is a trigger fn, not an API endpoint.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -78,7 +82,9 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
+
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM anon, authenticated;
 
 CREATE TRIGGER trg_on_auth_user_created
   AFTER INSERT ON auth.users
