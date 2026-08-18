@@ -33,7 +33,8 @@ This is deliberately a "boring" architecture: every request either renders a Ser
 │   │   ├── layout.tsx
 │   │   ├── login/page.tsx
 │   │   ├── signup/page.tsx
-│   │   └── reset-password/page.tsx
+│   │   ├── forgot-password/page.tsx # request recovery email
+│   │   └── reset-password/page.tsx  # password-update form (callback target)
 │   ├── (app)/                       # authenticated, protected
 │   │   ├── layout.tsx               # session check + redirect
 │   │   ├── dashboard/page.tsx
@@ -55,15 +56,18 @@ This is deliberately a "boring" architecture: every request either renders a Ser
 │   ├── supabase/
 │   │   ├── client.ts                # browser client (anon key)
 │   │   ├── server.ts                # server component / action client (user session)
-│   │   └── admin.ts                 # service-role client — 'server-only', webhook use alone
+│   │   └── admin.ts                 # service-role client — 'server-only'; used by webhook route and billing repository
 │   ├── stripe/
 │   │   ├── client.ts                # Stripe SDK singleton
 │   │   ├── checkout.ts              # createCheckoutSession()
 │   │   ├── portal.ts                # createPortalSession()
 │   │   └── webhook-handlers.ts      # event-type → handler map
+│   ├── billing/
+│   │   └── repository.ts            # server-only billing DB operations (getOrCreateStripeCustomer, upsertSubscription)
 │   ├── entitlements/
 │   │   ├── config.ts                # central product/plan configuration
-│   │   └── get-entitlements.ts      # resolves a user's current plan/access
+│   │   ├── get-entitlements.ts      # resolves a user's current plan/access
+│   │   └── billing-owner.ts         # getUserBillingOwnerId() — core returns userId unchanged
 │   ├── env.ts                       # zod-validated environment, single import site
 │   └── utils.ts                     # cn() and other small helpers
 ├── modules/                         # optional, opt-in, isolated (see §9)
@@ -88,7 +92,11 @@ This is deliberately a "boring" architecture: every request either renders a Ser
 │   ├── unit/
 │   │   ├── entitlements.test.ts
 │   │   ├── webhook-handlers.test.ts
+│   │   ├── webhook-idempotency.test.ts
+│   │   ├── billing-owner.test.ts
 │   │   └── env.test.ts
+│   ├── integration/
+│   │   └── checkout-flow.test.ts
 │   └── setup.ts
 ├── docs/
 │   └── implementation-plan.md
@@ -109,12 +117,12 @@ This is deliberately a "boring" architecture: every request either renders a Ser
 
 `auth.users` is managed by Supabase Auth and is not modified directly. All app tables live in `public` and hang off `auth.users.id`.
 
-| Table           | Columns                                                                                                                                                                                                                                                                          | Notes                                                                                                                                                                                                                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `profiles`      | `id uuid PK references auth.users(id)`, `full_name text`, `avatar_url text`, `created_at timestamptz default now()`, `updated_at timestamptz default now()`                                                                                                                      | 1:1 with a user. Row created lazily on first authenticated request if missing.                                                                                                                                                                                                                         |
-| `customers`     | `user_id uuid PK references auth.users(id)`, `stripe_customer_id text unique not null`, `created_at timestamptz default now()`                                                                                                                                                   | Maps a user to exactly one Stripe Customer. Populated lazily — see §4/§5 — never at signup. Written only by server code holding the service-role client, via an idempotent get-or-create so concurrent requests can't create two Stripe Customers for the same user (§7 discusses the resolver shape). |
-| `subscriptions` | `id text PK` (Stripe subscription id), `user_id uuid references auth.users(id)`, `stripe_customer_id text`, `status text`, `price_id text`, `quantity int`, `cancel_at_period_end boolean`, `current_period_end timestamptz`, `created_at timestamptz`, `updated_at timestamptz` | Mirrors the Stripe Subscription object. Upserted by the webhook handler only. This table, not Stripe, is what the app reads on every request for entitlement checks — Stripe is source of truth for _correctness_, this table is source of truth for _read latency_.                                   |
-| `stripe_events` | `id text PK` (Stripe event id), `type text`, `created_at timestamptz default now()`                                                                                                                                                                                              | Idempotency ledger. See §6.                                                                                                                                                                                                                                                                            |
+| Table           | Columns                                                                                                                                                                                                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `profiles`      | `id uuid PK references auth.users(id)`, `full_name text`, `avatar_url text`, `created_at timestamptz default now()`, `updated_at timestamptz default now()`                                                                                                                                                 | 1:1 with a user. Row created lazily on first authenticated request if missing. `updated_at` must be kept current; use a trigger (`moddatetime`) or explicit `SET updated_at = now()` on every update.                                                                                                                                                                                                                                            |
+| `customers`     | `user_id uuid PK references auth.users(id)`, `stripe_customer_id text unique not null`, `created_at timestamptz default now()`                                                                                                                                                                              | Maps a user to exactly one Stripe Customer. Populated lazily — see §4/§5 — never at signup. Written only by server code via the billing repository (`lib/billing/repository.ts`), which holds the service-role client and performs an idempotent upsert-on-conflict — see §7 for the full concurrency model.                                                                                                                                     |
+| `subscriptions` | `id text PK` (Stripe subscription id), `user_id uuid references auth.users(id)`, `stripe_customer_id text not null`, `status text not null`, `price_id text`, `quantity int`, `cancel_at_period_end boolean`, `current_period_end timestamptz`, `created_at timestamptz`, `updated_at timestamptz not null` | Mirrors the Stripe Subscription object. Upserted exclusively by the webhook handler. `updated_at` must be set on every upsert. Unknown `status` values (not in the handled set) must be stored as-is rather than silently discarded — the row still receives the raw `status` string; entitlement resolution in §7 treats any status outside `('active', 'trialing')` as the free tier. This table is what the app reads for entitlement checks. |
+| `stripe_events` | `id text PK` (Stripe event id), `type text not null`, `status text not null default 'processing'`, `created_at timestamptz default now()`, `updated_at timestamptz not null`                                                                                                                                | Atomic idempotency ledger and processing-state tracker. See §6 for the full state machine (`processing` → `processed` / `failed`).                                                                                                                                                                                                                                                                                                               |
 
 No ORM, no schema-management DSL: schema lives as plain, numbered SQL migration files under `supabase/migrations`, applied via the Supabase CLI. Types are generated from the live schema (`supabase gen types typescript`) rather than hand-maintained or derived from an ORM model layer.
 
@@ -126,9 +134,18 @@ No ORM, no schema-management DSL: schema lives as plain, numbered SQL migration 
 - **Extension point for additional providers:** all sign-in/sign-up UI renders through a single `components/shared/auth-form.tsx` (or equivalent) that takes a list of enabled methods; the initial template passes it exactly one (`password`). Adding `magic-link` or `oauth:google` later means extending that method list and adding the corresponding Supabase client call (`signInWithOtp` / `signInWithOAuth`) — no change to `middleware.ts`, the `(auth)` route structure, or any table. `README.md`/`CLAUDE.md` documents this extension point explicitly so it isn't rediscovered later by reading source.
 - Session handling: `@supabase/ssr`, cookie-based, refreshed in `middleware.ts` on every request so Server Components always see a valid session without a client-side round trip. This mechanism is identical regardless of which sign-in method issued the session, which is what makes providers addable later without touching session/middleware code.
 - Protected routes: the `(app)` route group's `layout.tsx` is a Server Component that calls `supabase.auth.getUser()`; on no session, it redirects to `/login` before rendering anything underneath. This is the only gate — there is no separate authorization middleware layer beyond it in the core template.
-- Sign-up creates only the `auth.users` row (Supabase-managed). `profiles` is created lazily on first authenticated request if missing; `customers` is **not** created at signup at all — see §4/§5 and decision 2, §17.
+- Sign-up creates only the `auth.users` row (Supabase-managed). `profiles` is created lazily on first authenticated request if missing; `customers` is **not** created at signup at all — see §5 and decision 2, §17.
 - Logout clears the Supabase session cookie via a Server Action.
-- Password reset uses Supabase's built-in recovery email flow; no custom email templates are required for the core template (Supabase's default transactional email covers this without adding Resend).
+
+### Forgot Password / Recovery Flow
+
+The forgot-password and password-recovery flows are part of the core auth surface and are implemented as follows:
+
+1. **`/forgot-password` page** — unauthenticated. Renders a simple email-input form. On submit, calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: '<SITE_URL>/reset-password' })`. Supabase sends a recovery email with a one-time link. The page always renders a generic confirmation message ("If an account exists for that email, a reset link has been sent") regardless of whether the address is registered, to avoid email enumeration.
+2. **Recovery email link** — Supabase Auth generates a link containing a token (PKCE flow) pointing to `<SITE_URL>/reset-password`. The `(auth)/reset-password/page.tsx` page is the callback target for this link.
+3. **`/reset-password` page** — unauthenticated (user arrives via the emailed link, not a session). Reads the Supabase `code` search param from the URL, exchanges it for a session via `supabase.auth.exchangeCodeForSession(code)`, then renders a password-update form. On submit, calls `supabase.auth.updateUser({ password: newPassword })`. On success, redirects to `/login` (or `/dashboard` if a session is now active). On error (expired/already-used token), renders an error state with a link back to `/forgot-password`.
+4. **Middleware note:** `middleware.ts` must not redirect the `/reset-password` path to `/login` when no prior session exists — it is a valid unauthenticated callback target. The unauthenticated `(auth)` route group already handles this correctly by design.
+5. **No custom email templates** are required for the core template; Supabase's default transactional email covers the recovery message. Resend-based custom templates are an optional module concern.
 
 ---
 
@@ -137,10 +154,12 @@ No ORM, no schema-management DSL: schema lives as plain, numbered SQL migration 
 Checkout and the Customer Portal are both **Stripe-hosted, redirect-based**. The app never renders Stripe Elements and never touches card data, so no client-side Stripe.js is needed in the core template — that removes an entire dependency and its CSP/PCI surface.
 
 1. Authenticated user clicks "Subscribe" with a `priceId` that comes from `lib/entitlements/config.ts` (never a client-supplied arbitrary string).
-2. `POST /api/stripe/checkout` validates the request body with Zod against the allow-list of known price IDs, then calls a single `getOrCreateStripeCustomer(userId)` resolver (see §7) which **lazily provisions the Stripe Customer on first use** — at Checkout or at Portal, whichever happens first for that user, never at signup (decision 2, §17) — then creates a Checkout Session (`mode: "subscription"`) and returns the redirect URL.
+2. `POST /api/stripe/checkout` validates the request body with Zod against the allow-list of known price IDs, then calls `getOrCreateStripeCustomer(userId)` (see §7), which **lazily provisions the Stripe Customer on first use** — at Checkout or at Portal, whichever happens first for that user, never at signup (decision 2, §17). It then creates a Checkout Session (`mode: "subscription"`) with the `stripe_customer_id` set and `client_reference_id` set to the app `userId` for ownership resolution in webhooks (see §6.1). Returns the Stripe-hosted redirect URL.
 3. Client redirects to Stripe-hosted Checkout. Stripe handles payment collection entirely.
 4. On success, Stripe redirects to `success_url` (e.g. `/settings/billing?checkout=success`). This page shows an optimistic "activating your subscription…" state — it does **not** grant access itself. It may poll a lightweight status endpoint for a few seconds for a snappier UI, but the underlying `subscriptions` row, and therefore real entitlement, is only ever written by the webhook (§6). This avoids trusting the redirect as proof of payment.
-5. "Manage billing" in Settings calls `POST /api/stripe/portal`, which also goes through `getOrCreateStripeCustomer(userId)` first (a user who never checked out can still open the Portal to, e.g., see billing history — the Portal handles "no active subscription" gracefully), then creates a Billing Portal session for the resolved `stripe_customer_id` and redirects there for plan changes, payment-method updates, and cancellation. The app does not reimplement any of that UI.
+5. "Manage billing" in Settings calls `POST /api/stripe/portal`, which also goes through `getOrCreateStripeCustomer(userId)` first (a user who never checked out can still open the Portal to see billing history), then creates a Billing Portal session and redirects. The app does not reimplement any of that UI.
+
+Both `/api/stripe/checkout` and `/api/stripe/portal` require an authenticated session. Unauthenticated requests receive a `401` before any Stripe call is made.
 
 ---
 
@@ -149,81 +168,161 @@ Checkout and the Customer Portal are both **Stripe-hosted, redirect-based**. The
 `app/api/stripe/webhook/route.ts`:
 
 - Runs on the Node.js runtime (not Edge) because the Stripe SDK's signature verification needs Node's `crypto`.
-- Reads the **raw** request body (`await req.text()`) — App Router Route Handlers give you the unparsed body natively, so no special body-parser config is required (unlike the old Pages Router).
-- Verifies `stripe-signature` against `STRIPE_WEBHOOK_SECRET` before touching the payload at all. Invalid signature → 400, nothing processed.
-- Idempotency, two layers:
-  1. **Ledger check:** look up `event.id` in `stripe_events`. If present, return `200` immediately — already handled. Stripe retries on non-2xx responses and can also redeliver, so this must be cheap and first.
-  2. **Natural idempotency of the writes:** every handler upserts on a stable primary key (`subscriptions.id` = Stripe subscription id, `customers.user_id`), so even a duplicate that slips past the ledger check is a no-op, not a corruption. The ledger is an optimization and an audit trail, not the only safety net.
-- Handled event types, kept to the minimum that keeps `subscriptions` correct: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`. Each is a small, pure function in `webhook-handlers.ts` keyed by event type in a plain object map (not a plugin framework — see §16.2) so an optional module can register an additional handler for an event type without editing the core switch.
-- Processing happens synchronously in the request — no queue. At this scale the work is one or two upserts; this is explicitly revisited if an optional module (e.g. sending an email on every subscription event) adds enough latency to risk the function timeout — see §13.
-- After successful processing, insert the event id into `stripe_events`, then return `200`.
+- Reads the **raw** request body (`await req.text()`) — App Router Route Handlers give you the unparsed body natively, so no special body-parser config is required.
+
+### 6.1 Stripe Metadata and Ownership Resolution
+
+Stripe objects must carry enough metadata to allow the webhook handler to resolve ownership without trusting mutable Stripe state alone:
+
+| Object               | Required metadata / fields                                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Checkout Session** | `client_reference_id` set to the app `userId` at session creation. Used by `checkout.session.completed` to link the resulting Subscription to a user when the `customers` row does not yet exist. |
+| **Customer**         | `metadata.userId` set to the app `userId` when the Stripe Customer is created via `getOrCreateStripeCustomer`. Allows recovery if the `customers` row is ever missing.                            |
+| **Subscription**     | Inherits the Customer; no extra metadata required. The handler resolves `user_id` by looking up `customers.stripe_customer_id`.                                                                   |
+
+The canonical ownership-resolution order in a webhook handler is:
+
+1. Prefer the local `customers` table lookup by `stripe_customer_id` (fast, no Stripe API call).
+2. Fall back to `checkout.session.client_reference_id` (available only on `checkout.session.completed`).
+3. Last resort: retrieve the Stripe Customer object and read `metadata.userId` (one Stripe API call; only if the above two fail).
+
+### 6.2 Webhook Processing State Machine
+
+The `stripe_events` table implements a **processing-state ledger** rather than a simple presence check. The atomic claim prevents duplicate concurrent processing; the state column enables safe retries after failure.
+
+**States:**
+
+| Status       | Meaning                                                            |
+| ------------ | ------------------------------------------------------------------ |
+| `processing` | Event has been claimed; a handler is (or was) actively running.    |
+| `processed`  | Handler completed successfully; event must not be re-processed.    |
+| `failed`     | Handler threw an unrecoverable error; safe to retry (Stripe will). |
+
+**Processing flow — strict ordering:**
+
+1. **Verify the signature first.** Call `stripe.webhooks.constructEvent(rawBody, signature, secret)`. If verification fails → `400`, stop. Nothing else runs before this.
+2. **Atomically claim the event.** Execute a single `INSERT INTO stripe_events (id, type, status, created_at, updated_at) VALUES ($1, $2, 'processing', now(), now()) ON CONFLICT (id) DO NOTHING` via the service-role client. Check the row count of the result:
+   - **0 rows inserted** → a row already exists. Read its `status`:
+     - `processed` → `200` immediately (already handled).
+     - `processing` → another handler is live; return `200` to stop Stripe retrying right now (the in-flight handler will complete or mark it `failed`).
+     - `failed` → the previous attempt errored; fall through and re-process (safe retry path).
+   - **1 row inserted** → this handler owns the event; proceed.
+3. **Run the appropriate handler.** Dispatch to the handler map in `webhook-handlers.ts`. If no handler is registered for the event type, mark the event `processed` and return `200` (unknown types are silently acknowledged — see §11 for the test covering this).
+4. **On handler success:** update `stripe_events SET status = 'processed', updated_at = now() WHERE id = $1`, then return `200`.
+5. **On handler error:** update `stripe_events SET status = 'failed', updated_at = now() WHERE id = $1`, then return `500`. Stripe will retry according to its retry schedule; the retry will enter the `failed` re-process path in step 2.
+
+**This design deliberately avoids a read-then-insert pattern.** A read followed by a conditional insert is not atomic and creates a TOCTOU window where two concurrent requests both see "no row" and both proceed. The `INSERT … ON CONFLICT DO NOTHING` + row-count check is atomic at the Postgres level and is the correct primitive here.
+
+### 6.3 Handled Event Types
+
+The following events are handled. These are the minimum set needed to keep `subscriptions` correct and entitlement accurate:
+
+| Event type                      | Effect on local state                                                                                                                                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `checkout.session.completed`    | Ensure `customers` row exists (upsert); upsert `subscriptions` row from the session's subscription data.                                                                                      |
+| `customer.subscription.created` | Upsert `subscriptions` row.                                                                                                                                                                   |
+| `customer.subscription.updated` | Upsert `subscriptions` row (status, price, period end, cancel flag).                                                                                                                          |
+| `customer.subscription.deleted` | Upsert `subscriptions` row with `status = 'canceled'`.                                                                                                                                        |
+| `invoice.paid`                  | Update `subscriptions.current_period_end` and confirm `status = 'active'`; ensures recurring renewals keep the entitlement window current even when no `customer.subscription.updated` fires. |
+| `invoice.payment_failed`        | Update `subscriptions.status` to `'past_due'`; revokes access at the next entitlement read.                                                                                                   |
+
+**Entitlement-controlling events** are those that write to `subscriptions.status` or `subscriptions.current_period_end`. The combination of `customer.subscription.*` events (lifecycle) plus `invoice.paid` (renewal confirmation) plus `invoice.payment_failed` (delinquency) is the complete set. No other event type changes entitlement in the core template.
+
+Unknown event types (not in the map above) are claimed, immediately marked `processed`, and return `200` — they are acknowledged to stop Stripe retrying, and the stored row serves as a debug audit trail.
+
+### 6.4 Failure and Retry Semantics
+
+- The webhook route returns `2xx` **only** after the event has been fully processed and the `stripe_events` row is marked `processed`.
+- A `500` response signals processing failure. Stripe retries failed webhooks with exponential backoff (up to 72 hours). Each retry re-enters the state machine at step 2 above. Because the state is `failed`, it is treated as a fresh attempt rather than a duplicate.
+- The `processing` state protects against in-flight duplication (two concurrent Stripe deliveries of the same event), not against retries after failure. A webhook that returns `500` will always be retried cleanly.
+- At-least-once delivery means idempotent handler logic is still required. Every handler upserts on a stable primary key (`subscriptions.id` = Stripe subscription id), so a duplicate that is re-processed (e.g. a concurrent delivery where both see `failed`) is a no-op, not a corruption.
+- **No queue.** Processing is synchronous in the request. At core scope the work is one or two upserts and a ledger update; this is explicitly revisited if an optional module adds enough latency to risk the function timeout (see §13).
 
 ---
 
 ## 7. Entitlement Model
 
-- `lib/entitlements/config.ts` is the **central product configuration**: a small, explicit object listing each plan (key, display name, Stripe price id, feature flags/limits). Price IDs are read from validated environment variables (`STRIPE_PRICE_*`, see §10) rather than hardcoded, so the _shape_ of the config is generic and reusable across products while the _values_ are wired per-deployment — this is what keeps the template product-agnostic (§16.1 discusses this tension explicitly).
+- `lib/entitlements/config.ts` is the **central product configuration**: a small, explicit object listing each plan (key, display name, Stripe price id, feature flags/limits). Price IDs are read from validated environment variables (`STRIPE_PRICE_*`, see §10) rather than hardcoded, so the _shape_ of the config is generic and reusable across products while the _values_ are wired per-deployment.
 - `lib/entitlements/get-entitlements.ts` is the single function the rest of the app calls. Given a **billing owner id**, it reads the matching row from `subscriptions` (RLS-scoped, using the request-authenticated Supabase client — no service role needed for a read of your own row), maps `status` + `price_id` against `config.ts`, and returns a plan tier plus feature flags:
   - `status in ('active', 'trialing')` → entitled at the plan mapped from `price_id`.
-  - Anything else (`past_due`, `canceled`, `unpaid`, or no row) → free/no-access tier.
-- This function is called from Server Components/Actions to gate UI and from Route Handlers to gate protected server logic. There is no separate "entitlements service" — it's a query plus a lookup table, deliberately kept that simple.
+  - Anything else (`past_due`, `canceled`, `unpaid`, or no row, or any unknown status) → free/no-access tier.
+- This function is called from Server Components/Actions to gate UI and from Route Handlers to gate protected server logic. There is no separate "entitlements service" — it's a query plus a lookup table.
 
-**Billing-owner indirection (decision 4, §17).** In the core template a billing owner is always a user, so "billing owner id" and "`auth.uid()`" are the same value everywhere. To avoid a schema rewrite the day a workspace/organization owner is introduced, that mapping is isolated behind one function rather than inlined at every call site:
+### Billing-Owner Abstraction
+
+**In the core template, a billing owner is always a user.** The function `getUserBillingOwnerId(userId)` in `lib/entitlements/billing-owner.ts` returns `userId` unchanged. `getOrCreateStripeCustomer`, `getEntitlements`, and the checkout/portal Route Handlers all resolve the billing owner through this one function.
 
 ```
 lib/entitlements/billing-owner.ts
-  getBillingOwnerId(userId: string): Promise<string>   // core: returns userId unchanged
+  getUserBillingOwnerId(userId: string): Promise<string>   // core: returns userId unchanged
 ```
 
-- `getOrCreateStripeCustomer`, `getEntitlements`, and the checkout/portal Route Handlers all resolve the billing owner through this one function instead of assuming `auth.uid()` directly. `customers.user_id` and `subscriptions.user_id` are named generically enough (`user_id`, not e.g. `owner_user_id_not_org_id`) that a future Teams module can repoint `getBillingOwnerId` to return a workspace id and rename/repoint the FK — a schema and resolver change, but **not** a rewrite of `webhook-handlers.ts`, the Stripe API calls, or the idempotency ledger, all of which only ever operate on "the billing owner id," never on "the user id" as a hardcoded concept.
-- This is intentionally a single indirection point, not a speculative "owner" abstraction layered through the whole codebase (§16.2) — everything else in core still reads and writes `user_id` columns directly and in plain SQL.
+**Important constraints and future-org warning:**
+
+- `customers.user_id` and `subscriptions.user_id` currently hold the Supabase `auth.users.id` value directly. They are named generically, but they are foreign-keyed to `auth.users(id)`.
+- **Future organization billing is not a free swap.** If a future Teams module needs billing owned by an organization rather than a user, the following are all required: (a) a schema migration to drop or replace the `auth.users` foreign keys on `customers` and `subscriptions` (or add a parallel org-scoped table); (b) a full RLS policy rewrite, since the current policies use `auth.uid()` directly; (c) a data migration for any existing rows. Returning a workspace/org ID from `getUserBillingOwnerId` will **not** work with the current schema — the FK constraint will reject it. `README.md`/`CLAUDE.md` must document this explicitly so a future developer does not assume the indirection point alone is sufficient.
+- The indirection point narrows the _code-search blast radius_ to that one resolver plus its call sites. It does not eliminate the need for a real schema and RLS migration when org billing is introduced.
+- Everything else in core still reads and writes `user_id` columns directly and in plain SQL.
+
+### Lazy Stripe Customer Provisioning (`getOrCreateStripeCustomer`)
+
+Lives in `lib/billing/repository.ts`, which imports the service-role client and is marked `server-only`. The algorithm:
+
+1. Read `customers` for `user_id`. If a row exists, return `stripe_customer_id` immediately.
+2. Create a Stripe Customer via the Stripe API with `metadata: { userId }`.
+3. `INSERT INTO customers (user_id, stripe_customer_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`.
+4. Re-read the row and return `stripe_customer_id` (handles the loser of a concurrent race — it gets the winner's customer id).
+
+**Concurrency note:** this provides _local_ idempotency via the unique constraint on `customers.user_id`. In the rare true-concurrent case where two requests both complete step 1 with no row found, both reach step 2, and both call the Stripe API, **at most one orphaned unused Stripe Customer object** will be created in Stripe. This is a Stripe-side cleanup cost, not a data-integrity issue — the local `customers` table will never contain more than one row per user. This is **not** strict external API idempotency (no distributed lock prevents two Stripe API calls); it is local uniqueness enforced by the database constraint. Acceptable at this scale; noted as a known edge case.
 
 ---
 
 ## 8. Security Model
 
-- **Service-role isolation:** the Supabase service-role client (`lib/supabase/admin.ts`) is the only client that can bypass RLS. It is imported by the webhook route only, marked with the `server-only` package so any accidental client import fails the build rather than leaking the key at runtime.
+- **Service-role client scope:** `lib/supabase/admin.ts` creates a Supabase client with the service-role key. It is the only client that bypasses RLS. It is marked with the `server-only` package so any accidental import into a Client Component or browser bundle fails the build. **It is consumed by two places in core:**
+  1. The webhook route (`app/api/stripe/webhook/route.ts`) — to perform the atomic event claim and upsert subscriptions/customers without RLS interference.
+  2. `lib/billing/repository.ts` — the narrowly scoped, server-only billing repository used for lazy Stripe Customer provisioning (`getOrCreateStripeCustomer`).
+     No other file in core should import from `lib/supabase/admin.ts`. It must never appear in `lib/supabase/client.ts`, any component, or any path reachable from the client bundle.
 - **RLS everywhere:** RLS is enabled on `profiles`, `customers`, `subscriptions`, `stripe_events` with default-deny and explicit policies:
   - `profiles`: user can `select`/`update` where `id = auth.uid()`.
-  - `customers`, `subscriptions`, `stripe_events`: user can `select` their own row(s) only (`user_id = auth.uid()` where applicable; `stripe_events` has no user-facing read need and can simply have no client-facing policy at all). No client-side `insert`/`update`/`delete` policy exists on any of these three — all writes come from the service-role webhook path or the lazy-provisioning resolver by design.
-- **Input validation:** Zod schemas at every external boundary — environment variables (§10), the checkout request body (price id allow-list), the profile update form, and the _shape_ expected from a verified Stripe event before it's passed to a handler. Signature verification proves authenticity; Zod validation still guards shape before the app trusts field values.
-- **Secrets never reach the client:** only `NEXT_PUBLIC_*`-prefixed variables are readable in browser code; `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET` are never prefixed that way and are only referenced from files under `lib/*/admin.ts`, `lib/stripe/client.ts`, and the webhook route.
-- **CSRF:** the checkout and portal Route Handlers require a valid Supabase session cookie (`SameSite=Lax` by default) and re-check the session server-side rather than trusting any client-supplied user id. The webhook route is intentionally exempt from session auth — it authenticates via Stripe's signature instead, which is the correct mechanism for a server-to-server callback.
+  - `customers`, `subscriptions`: user can `select` their own row(s) only (`user_id = auth.uid()`). No client-side `insert`/`update`/`delete` policy exists — all writes come from the service-role path by design.
+  - `stripe_events`: no client-facing policy at all; no user-facing read need exists.
+- **Input validation:** Zod schemas at every external boundary — environment variables (§10), the checkout request body (price id allow-list), the profile update form, and the _shape_ expected from a verified Stripe event before it's passed to a handler. Signature verification proves authenticity; Zod validation still guards shape.
+- **Secrets never reach the client:** only `NEXT_PUBLIC_*`-prefixed variables are readable in browser code; `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET` are never prefixed that way and are only referenced from `lib/supabase/admin.ts`, `lib/billing/repository.ts`, `lib/stripe/client.ts`, and the webhook route.
+- **CSRF:** checkout and portal Route Handlers require a valid Supabase session cookie (`SameSite=Lax` by default) and re-verify the session server-side. Unauthenticated requests to `/api/stripe/checkout` and `/api/stripe/portal` are rejected with `401`. The webhook route is intentionally exempt from session auth — it authenticates via Stripe's HMAC signature instead.
 
 ---
 
 ## 9. Optional Module Boundaries
 
-Each optional module lives in its own `modules/<name>` folder, is not imported anywhere in core unless explicitly wired in, and is added only when a concrete need shows up. None are scaffolded with real code in the initial template — folders may not even exist until the first module is added.
+Each optional module lives in its own `modules/<name>` folder, is not imported anywhere in core unless explicitly wired in, and is added only when a concrete need shows up.
 
-| Module                      | What it adds                                                                                                                      | Touches core how                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Teams/workspaces**        | `organizations`, `memberships` tables; RLS keyed by org membership                                                                | Still the largest blast radius of any optional module — moving `subscriptions`/`customers` from `user_id`-owned to org-owned is a real data migration of core tables, not a pure addition. §7's `getBillingOwnerId` indirection (decision 4, §17) narrows the _code_ change to that one resolver plus the webhook-handler call sites that use it, but does not remove the need to migrate existing `subscriptions.user_id` values to an owner id and rewrite the RLS policies on those tables. |
-| **Usage-based billing**     | `usage_records` table, Stripe usage-record/metered-price calls                                                                    | Registers an extra handler in the webhook event map (`invoice.created`, etc.); does not change core tables.                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Supabase Storage**        | Buckets + storage RLS policies                                                                                                    | Additive only — new policies, no change to existing tables.                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Resend (email)**          | Transactional email templates + send calls                                                                                        | Called from a hook point after webhook processing succeeds (fire-and-forget), never from inside the core handler itself.                                                                                                                                                                                                                                                                                                                                                                       |
-| **PostHog (analytics)**     | Client + server tracking wrappers                                                                                                 | Additive script/provider; no schema or auth changes.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Sentry (error tracking)** | Instrumentation config, source maps                                                                                               | Additive; adds build-time complexity (source map upload) worth calling out under maintenance cost.                                                                                                                                                                                                                                                                                                                                                                                             |
-| **AI integrations**         | Provider SDK, its own routes/env vars                                                                                             | Fully additive, isolated route handlers.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Background jobs**         | Vercel Cron for simple schedules, or a queue service (e.g. Inngest/Trigger.dev) only if genuine durable/async execution is needed | Not added speculatively — see §16.2.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Module                      | What it adds                                                                                                                      | Touches core how                                                                                                                                                                                                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Teams/workspaces**        | `organizations`, `memberships` tables; RLS keyed by org membership                                                                | Largest blast radius of any module — requires a schema migration (drop/replace FK on `customers`/`subscriptions`), a full RLS policy rewrite, and a data migration. `getUserBillingOwnerId` is the code indirection point but does **not** eliminate the migration need (see §7). |
+| **Usage-based billing**     | `usage_records` table, Stripe usage-record/metered-price calls                                                                    | Registers extra handlers in the webhook event map; does not change core tables.                                                                                                                                                                                                   |
+| **Supabase Storage**        | Buckets + storage RLS policies                                                                                                    | Additive only — new policies, no change to existing tables.                                                                                                                                                                                                                       |
+| **Resend (email)**          | Transactional email templates + send calls                                                                                        | Called from a hook point after webhook processing succeeds (fire-and-forget), never from inside the core handler itself.                                                                                                                                                          |
+| **PostHog (analytics)**     | Client + server tracking wrappers                                                                                                 | Additive script/provider; no schema or auth changes.                                                                                                                                                                                                                              |
+| **Sentry (error tracking)** | Instrumentation config, source maps                                                                                               | Additive; adds build-time complexity (source map upload).                                                                                                                                                                                                                         |
+| **AI integrations**         | Provider SDK, its own routes/env vars                                                                                             | Fully additive, isolated route handlers.                                                                                                                                                                                                                                          |
+| **Background jobs**         | Vercel Cron for simple schedules, or a queue service (e.g. Inngest/Trigger.dev) only if genuine durable/async execution is needed | Not added speculatively — see §16.2.                                                                                                                                                                                                                                              |
 
 ---
 
 ## 10. Environment Variables
 
-Validated once, at import time, in `lib/env.ts` via a single Zod schema (`process.env` is parsed once; anything downstream imports the validated, typed object — never `process.env` directly). Build/boot fails loudly on a missing or malformed value rather than failing at request time.
+Validated once, at import time, in `lib/env.ts` via a single Zod schema. Build/boot fails loudly on a missing or malformed value rather than failing at request time.
 
 | Variable                                                              | Exposure    | Purpose                                                                                            |
 | --------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`                                            | public      | Supabase project URL                                                                               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                       | public      | Supabase anon key (RLS-scoped, safe client-side)                                                   |
-| `SUPABASE_SERVICE_ROLE_KEY`                                           | server-only | Bypasses RLS — webhook route only                                                                  |
+| `SUPABASE_SERVICE_ROLE_KEY`                                           | server-only | Bypasses RLS — webhook route and billing repository only                                           |
 | `STRIPE_SECRET_KEY`                                                   | server-only | Stripe server SDK                                                                                  |
 | `STRIPE_WEBHOOK_SECRET`                                               | server-only | Verifies webhook signatures                                                                        |
 | `STRIPE_PRICE_<PLAN>` (one per plan, e.g. `STRIPE_PRICE_PRO_MONTHLY`) | server-only | Feeds `lib/entitlements/config.ts`; differs between Stripe test/live mode and thus per environment |
 | `NEXT_PUBLIC_SITE_URL`                                                | public      | Builds Checkout/Portal `success_url`/`cancel_url`/`return_url`                                     |
-
-Deliberately **not** included: analytics keys, email provider keys, AI provider keys — those belong to their respective optional modules' own env schemas, so core `env.ts` doesn't grow with every module a founder might never enable.
 
 ---
 
@@ -231,52 +330,89 @@ Deliberately **not** included: analytics keys, email provider keys, AI provider 
 
 Core template ships **two layers** (decision 1, §17):
 
-**Vitest — unit and integration tests:**
+### Vitest — unit and integration tests
 
-- `env.test.ts` — the Zod schema rejects malformed/missing env and accepts a valid example.
-- `entitlements.test.ts` — given fixture `subscriptions` rows (active/past_due/canceled/none), `getEntitlements` returns the expected tier for each.
-- `webhook-handlers.test.ts` — each handler function, given a fixture Stripe event object and a mocked Supabase admin client, calls the expected upsert with the expected shape. This tests the pure logic, not real signature verification or a live webhook round-trip.
-- `billing-owner.test.ts` — `getBillingOwnerId` returns the input user id unchanged in core (guards against silent behavior drift if it's touched later).
-- `checkout-flow.test.ts` — an **integration** test (not E2E) that exercises `POST /api/stripe/checkout` end-to-end against a **mocked Stripe SDK client**: asserts `getOrCreateStripeCustomer` is called, that a second concurrent call for the same user does not create a second Stripe Customer (idempotency, decision 2), and that the Checkout Session is created with the validated price id. No real network call to Stripe is made.
+- `env.test.ts` — Zod schema rejects malformed/missing env and accepts a valid example.
+- `entitlements.test.ts` — given fixture `subscriptions` rows (active/trialing/past_due/canceled/none/unknown status), `getEntitlements` returns the expected tier. Unknown status values must fall through to the free tier, not throw.
+- `webhook-handlers.test.ts` — each handler function, given a fixture Stripe event object and a mocked service-role Supabase client, calls the expected upsert with the expected shape. Tests cover:
+  - `checkout.session.completed` — ensures both `customers` upsert and `subscriptions` upsert are called.
+  - `customer.subscription.created/updated/deleted` — verifies correct field mapping including `updated_at`.
+  - `invoice.paid` — confirms `current_period_end` is updated and `status` is set/confirmed active.
+  - `invoice.payment_failed` — confirms `status` is set to `past_due`.
+  - **Unknown event type** — handler returns without error; event is marked `processed`.
+  - **Unknown subscription status** — the raw status string is stored; entitlement resolves to free tier.
+- `webhook-idempotency.test.ts` — tests for the state-machine logic in §6.2:
+  - A `processing` event → `200` without re-running the handler.
+  - A `processed` event → `200` without re-running the handler.
+  - A `failed` event → handler is re-executed (safe retry path).
+  - **Concurrent duplicate events** — two simultaneous claims for the same event id; only one proceeds, the other returns `200` (simulate via two calls with mocked DB returning 0 rows on the second insert).
+  - Handler error → `stripe_events` row is marked `failed` and `500` is returned.
+- `billing-owner.test.ts` — `getUserBillingOwnerId` returns the input user id unchanged in core.
+- `checkout-flow.test.ts` (integration) — exercises `POST /api/stripe/checkout` against a mocked Stripe SDK:
+  - `getOrCreateStripeCustomer` is called with the authenticated user id.
+  - A second concurrent call for the same user does not create a second Stripe Customer (mocked DB returns conflict on second insert).
+  - Checkout Session is created with the validated price id and correct `client_reference_id`.
+  - **Unauthenticated request** → `401` before any Stripe call.
+  - **Invalid price id** (not in allow-list) → `400`.
+- `portal-flow.test.ts` (integration):
+  - **Unauthenticated request** → `401`.
+  - **Cross-user billing access** — a request authenticated as user A cannot access or create a portal session for user B's customer id (the route derives the customer id from the session user, not from request body).
+- `password-recovery.test.ts` — `resetPasswordForEmail` is called with the correct `redirectTo` URL; the reset-password page exchanges the code and calls `updateUser`; expired/invalid token path renders an error state.
 
-**Playwright — browser tests for core navigation and auth only:**
+### Playwright — browser tests for core navigation and auth
 
 - Sign up → land on dashboard.
 - Log out → redirected away from protected routes.
 - Attempt to visit `/dashboard` unauthenticated → redirected to `/login`.
-- Password reset request flow renders the expected confirmation state.
+- Forgot-password form submits and renders the generic confirmation message.
+- `/reset-password` with a valid Supabase code param → password-update form renders.
+- `/reset-password` with no code param / invalid code → error state renders.
 
-Explicitly **not** in the core template: a Playwright test that drives a real Stripe-hosted Checkout page. Live Checkout is third-party UI outside the app's control, flaky to automate reliably, and requires live/test API keys in CI. Instead:
+**RLS behavior tests (local Supabase):**
 
-- The mocked `checkout-flow.test.ts` above covers the app's own logic.
-- `README.md` documents an **optional manual verification procedure** for live Stripe: run `stripe listen --forward-to localhost:3000/api/stripe/webhook`, complete a real test-mode Checkout with Stripe's test card, and confirm the `subscriptions` row updates and the dashboard reflects the new entitlement. This is a documented runbook step, not an automated test — a founder runs it before major billing-code changes or before going live, not on every CI run.
+Where practical (i.e. when `supabase start` is available in the CI environment), a small suite of SQL-level tests or server-integration tests verifies RLS policies directly against a local Supabase instance:
+
+- A user cannot `SELECT` another user's `customers` or `subscriptions` row via the anon/user-scoped client.
+- A user cannot `INSERT` or `UPDATE` `subscriptions` via the anon/user-scoped client.
+- Service-role client can read and write all rows.
+  These are noted as "run locally with `supabase start`" if the CI environment cannot provide a full Postgres instance; they are not blocked on CI availability.
+
+**Not** in the core template: a Playwright test that drives a live Stripe-hosted Checkout page. Live Checkout is third-party UI, flaky to automate, and requires live/test API keys in CI. `README.md` documents a **manual live-Stripe verification runbook**: run `stripe listen --forward-to localhost:3000/api/stripe/webhook`, complete a test-mode Checkout with Stripe's test card, confirm the `subscriptions` row updates and the dashboard reflects the new entitlement.
 
 ---
 
 ## 12. Deployment Strategy
 
-- **Vercel**, Git-connected: push to `main` deploys to production; PRs get preview deployments automatically. No custom CI pipeline is required for the deploy itself.
-- **Environment variables** set per Vercel environment (Production/Preview/Development) in the dashboard, matching `.env.example`. Preview deployments will generally run against the same Supabase _project_ as local dev (or a dedicated dev project) and Stripe _test_ mode; production runs against Stripe live mode and a production Supabase project.
-- **Stripe webhook endpoint:** registered once against the production URL (`https://<domain>/api/stripe/webhook`) using the live-mode signing secret. Preview deployments do not receive live webhooks; local development uses `stripe listen --forward-to localhost:3000/api/stripe/webhook` with the CLI's own signing secret. This is a known, accepted limitation for a solo founder rather than something the template tries to solve with per-branch webhook provisioning.
-- **Database migrations:** applied **manually** (decision 5, §17) via the Supabase CLI against the target project. Not run automatically as part of the Vercel build, so a bad migration can't auto-apply to production on every deploy. `README.md`/deployment docs document the exact command sequence a founder runs:
-  - `supabase migration list` — see which migrations exist locally vs. which have been applied to the linked remote project, before touching anything.
-  - `supabase db reset` — local-only: rebuild the local dev database from all migrations plus seed data, for a clean slate while iterating.
-  - `supabase db push --dry-run` — show exactly what would be applied to the linked remote project without applying it, so the founder reviews the diff first.
-  - `supabase db push` — apply pending migrations to the linked remote project (staging or production, whichever is linked).
-  - A **TODO** is recorded in the deployment docs: a future protected GitHub Actions workflow that runs `supabase db push` against production only on a manually-approved run (using a GitHub Environment with a required reviewer), so migrations stay out of the automatic merge-to-`main` path even once CI-applied. Not built now — see decision 5, §17.
+- **Vercel**, Git-connected: push to `main` deploys to production; PRs get preview deployments automatically. No custom CI pipeline required for the deploy itself.
+- **Environment variables** set per Vercel environment (Production/Preview/Development) in the dashboard, matching `.env.example`. Preview deployments run against the same Supabase _project_ as local dev (or a dedicated dev project) and Stripe _test_ mode; production runs against Stripe live mode and a production Supabase project.
+- **Stripe webhook endpoint:** registered once against the production URL using the live-mode signing secret. Preview deployments do not receive live webhooks; local development uses `stripe listen --forward-to localhost:3000/api/stripe/webhook` with the CLI's own signing secret.
+- **Database migrations — manual deployment procedure:**
+
+  > ⚠️ **`supabase db reset` is destructive.** It drops and recreates the entire local database from scratch. Never run it against a linked remote project — only against the local dev database. There is no undo.
+
+  Applied **manually** (decision 5, §17) via the Supabase CLI. The exact command sequence:
+  1. `supabase migration list` — compare local vs. applied-to-remote state before touching anything.
+  2. `supabase db reset` — **local only**: rebuild the local dev database from all migrations plus seed. Drops all local data.
+  3. `supabase db push --dry-run` — preview what would be applied to the linked remote project without applying it. Review the diff carefully.
+  4. `supabase db push` — apply pending migrations to the linked remote (staging or production, whichever is linked).
+
+  **Ordering discipline:** migrations must be applied to the remote _before_ deploying application code that depends on them. A code deploy that references a schema column added in a migration that hasn't been pushed yet will fail at runtime. The safe order is always: push migrations → verify with `migration list` → deploy code.
+
+  A **TODO** is recorded: a future protected GitHub Actions workflow that runs `supabase db push` against production only on a manually-approved run (using a GitHub Environment with a required reviewer), so migrations stay out of the automatic merge-to-`main` path. Not built now — see decision 5, §17.
 
 ---
 
 ## 13. Major Risks and Trade-offs
 
-- **RLS misconfiguration is the single highest-severity risk** in this architecture — a wrong or missing policy silently exposes cross-user data. Mitigation: every policy is written explicitly in a migration file (no "just use the dashboard" policies), and the README includes an explicit pre-launch RLS checklist. Unit tests cannot verify RLS (they don't run against real Postgres); this is a known gap, not something Vitest can close.
-- **Checkout-success vs. webhook-arrival race:** the user can land back on the app before the webhook fires. Mitigated with an explicit "activating…" UI state rather than granting access on redirect alone (§5), but it's a real UX rough edge on Stripe's side, not something the app fully controls.
-- **Service-role key is a single powerful credential.** If leaked, it bypasses every RLS policy in the project. Mitigated with `server-only` import guards and by minimizing where it's referenced (webhook route only), but the residual risk is inherent to using a service-role key at all.
-- **Synchronous webhook processing with no queue** is simple and fine at core scope (a couple of upserts), but if an optional module adds slow work inside the same request (e.g., a blocking email send), it risks approaching the function timeout. The mitigation is a convention, not a technical guardrail: optional-module hooks triggered from webhook handling must be fire-and-forget or explicitly deferred, never awaited inline.
-- **Vendor lock-in to Supabase + Stripe + Vercel** is accepted deliberately in exchange for near-zero ops burden. Migrating off any one of them later is real work (Supabase: RLS + auth rewritten; Stripe: billing logic is deeply Stripe-shaped; Vercel: fairly portable since it's just Next.js). This is the central bet of "prefer managed services" and is worth being explicit about rather than pretending the template is vendor-neutral.
-- **Test/live mode duplication:** two Stripe price ID sets, two webhook secrets, and (typically) two Supabase projects/environments is real solo-founder operational overhead. Mitigated with a clear `.env.example` and deployment docs, not eliminated.
-- **No CI-enforced migration application** means schema and code can drift if the founder forgets to run a migration before/after deploying code that depends on it. `supabase migration list` and `db push --dry-run` (§12) reduce the chance of an accidental blind push, but the discipline is still manual. Accepted for now, with the CI-approval-gated workflow noted as a documented TODO rather than built (decision 5, §17) — revisit if drift causes an actual incident.
-- **Lazy Stripe Customer provisioning introduces a first-use race** (decision 2, §17): two near-simultaneous requests (e.g. a user double-clicking "Subscribe," or a checkout and a portal-visit landing at once) could both see "no customer yet" and attempt to create one. `getOrCreateStripeCustomer` must therefore be genuinely idempotent, not just "check then insert" — implemented via a unique constraint on `customers.user_id` (already the primary key) and an upsert-on-conflict pattern: attempt the Stripe Customer creation, then insert with `on conflict (user_id) do nothing`, then re-read the row so a loser of the race still gets the winner's `stripe_customer_id` rather than orphaning a duplicate Stripe Customer. Worth flagging: this can still leak at most one orphaned-but-unused Stripe Customer object in the rare true-concurrent case (Stripe has no server-side "get or create" primitive), which is a Stripe-side cleanup cost, not a data-integrity one — the local `customers` table never has more than one row per user.
+- **RLS misconfiguration is the single highest-severity risk** — a wrong or missing policy silently exposes cross-user data. Mitigation: every policy is written explicitly in a migration file, and `README.md` includes an explicit pre-launch RLS checklist. Unit tests cannot verify RLS (they don't run against real Postgres); this is a known gap, partially addressed by the local Supabase RLS tests in §11.
+- **Checkout-success vs. webhook-arrival race:** the user lands back on the app before the webhook fires. Mitigated with an explicit "activating…" UI state rather than granting access on redirect alone (§5). This is an inherent Stripe timing issue, not something the app fully controls.
+- **Service-role key is a single powerful credential.** If leaked, it bypasses every RLS policy. Mitigated with `server-only` import guards and by confining usage to the webhook route and the billing repository only. The residual risk is inherent to using a service-role key at all.
+- **Synchronous webhook processing with no queue** is fine at core scope (a couple of upserts). Optional-module hooks triggered from webhook handling must be fire-and-forget or explicitly deferred, never awaited inline.
+- **Vendor lock-in to Supabase + Stripe + Vercel** is accepted deliberately in exchange for near-zero ops burden.
+- **Test/live mode duplication:** two Stripe price ID sets, two webhook secrets, and typically two Supabase projects — real solo-founder operational overhead, mitigated with a clear `.env.example`.
+- **No CI-enforced migration application** — schema and code can drift if the founder forgets to run migrations in order. `supabase migration list` and `--dry-run` reduce the risk. The migration-ordering discipline in §12 is the primary mitigation.
+- **Lazy Stripe Customer provisioning race:** two near-simultaneous requests can both see "no customer yet" and both call the Stripe API, creating at most one orphaned unused Stripe Customer in Stripe. This is not a data-integrity issue (the local `customers` table never has more than one row per user), but it is a Stripe-side cleanup cost. There is no distributed lock; this is accepted at this scale — see §7.
+- **Future org billing is a real migration, not a config toggle.** `getUserBillingOwnerId` narrows the code blast radius but does not substitute for a schema and RLS migration. See §7 for the full warning.
 
 ---
 
@@ -284,29 +420,33 @@ Explicitly **not** in the core template: a Playwright test that drives a real St
 
 The core template deliberately does **not** provide:
 
-- Multi-tenant organizations, teams, or any role beyond "the account owner" (that's the Teams optional module, and it's a schema-changing addition, not a toggle).
+- Multi-tenant organizations, teams, or any role beyond "the account owner."
 - Usage-based/metered billing.
 - An admin dashboard or internal ops UI.
 - A public API for third-party consumption, or GraphQL.
 - Internationalization/localization.
 - A native mobile app or offline support.
-- SSO/SAML or custom-built authentication beyond what Supabase Auth provides out of the box.
+- SSO/SAML or custom-built authentication beyond what Supabase Auth provides.
 - Background job/queue infrastructure.
 - Multi-region deployment or read replicas.
-- Any product-specific business logic — features, copy, and domain rules belong to the app built _from_ this template, not to the template itself.
+- Any product-specific business logic.
 
 ---
 
 ## 15. Phased Implementation Sequence
 
 0. **Scaffolding** — Next.js + TS strict + Tailwind + shadcn init, ESLint/Prettier, `lib/env.ts` + `.env.example`, empty `README.md`/`CLAUDE.md`.
-1. **Supabase wiring** — browser/server/admin clients, core migrations (`profiles`, `customers`, `subscriptions`, `stripe_events`), RLS policies, local dev via Supabase CLI, generated types.
-2. **Auth** — signup/login/logout, `middleware.ts` session refresh, protected `(app)` route group, profile read/update page.
-3. **Stripe core** — `lib/entitlements/config.ts`, checkout route, webhook route + idempotency ledger, portal route.
-4. **Entitlements in the UI** — dashboard gates content by plan, billing settings page shows current plan + "Manage billing."
-5. **Tests** — Vitest unit/integration tests for entitlements, webhook handlers, billing-owner resolver, and mocked checkout flow; Playwright tests for signup/login/logout/route-protection; live-Stripe manual verification runbook documented in `README.md`.
-6. **Docs & deploy** — finalize `README.md` and `CLAUDE.md`, Vercel project + env vars, Stripe webhook registration, pre-launch RLS checklist.
-7. **Optional modules**, added one at a time, only when a concrete product needs them, each following the boundary rules in §9.
+1. **Supabase wiring** — browser/server/admin clients, core migrations (`profiles`, `customers`, `subscriptions`, `stripe_events`), RLS policies, local dev via Supabase CLI, generated types. Confirm `stripe_events` includes `status` and `updated_at` columns per §3.
+2. **Auth** — signup/login/logout, `middleware.ts` session refresh (ensure `/reset-password` is not blocked), protected `(app)` route group, profile read/update page, forgot-password flow and password-recovery callback (§4).
+3. **Stripe core** — `lib/entitlements/config.ts`, `lib/billing/repository.ts` (service-role, `getOrCreateStripeCustomer` with metadata), checkout route with `client_reference_id` and `metadata`, portal route, webhook route with atomic event claim and full state machine (§6), webhook handlers including `invoice.paid`.
+4. **Entitlements in the UI** — dashboard gates content by plan, billing settings page shows current plan + "Manage billing." `getEntitlements` must handle unknown status values gracefully.
+5. **Tests** — Vitest unit/integration tests per §11 (entitlements, webhook handlers, idempotency state machine, `invoice.paid`, concurrent duplicate events, unknown event types, unknown subscription statuses, unauthenticated checkout/portal, cross-user billing access, password recovery); Playwright tests (signup/login/logout/route-protection, forgot-password, reset-password); local Supabase RLS tests where practical; live-Stripe manual verification runbook in `README.md`.
+6. **Docs & deploy** — finalize `README.md` and `CLAUDE.md` (document `getUserBillingOwnerId` extension point and org-billing migration warning, document `supabase db reset` destructiveness and migration ordering, document service-role client consumers), Vercel project + env vars, Stripe webhook registration, pre-launch RLS checklist.
+7. **Optional modules**, added one at a time, only when a concrete product needs them.
+
+### Smallest Viable Core
+
+Everything in §1–§8 (architecture, directories excluding `modules/*`, schema, auth including password recovery, billing flow, webhook handling with state machine, entitlements, security) plus the test suite (§11) and deploy setup (§12) is the floor — removing any one of these breaks either "subscription SaaS" or "safe to run solo." The five decisions in §17 resolve the genuinely negotiable scope items within the mandatory features.
 
 ---
 
@@ -314,58 +454,66 @@ The core template deliberately does **not** provide:
 
 ### 16.1 Contradictory or Tension-Bearing Requirements
 
-None of the requirements are outright contradictory, but two pairs are in genuine tension and the design above resolves them explicitly rather than leaving them ambiguous:
-
-- **"Central product configuration" vs. "keep product-specific business logic out of the template."** Resolved by making the config's _shape_ generic (plan key → price id → feature flags) while its _values_ come from environment variables filled in per deployment. The template ships the pattern, not a specific product's plans.
-- **"Stripe webhooks as source of truth" vs. a founder's natural desire for instant post-checkout UI feedback.** Resolved by treating the redirect as a UI hint ("activating…") and the webhook-updated DB row as the only thing that ever grants entitlement — see §5 and the risk noted in §13. This is a UX cost accepted deliberately, not a bug to fix.
+- **"Central product configuration" vs. "keep product-specific business logic out of the template."** Resolved by making the config's _shape_ generic while its _values_ come from environment variables per deployment.
+- **"Stripe webhooks as source of truth" vs. instant post-checkout UI feedback.** Resolved by treating the redirect as a UI hint and the webhook-updated DB row as the only thing that grants entitlement (§5, §13).
+- **"Billing-owner indirection" vs. "current schema uses auth.users FK."** Resolved by documenting the indirection as a code blast-radius narrower only, not a schema substitute; org billing requires a real migration (§7, §9, §13).
 
 ### 16.2 Unnecessary Complexity Rejected
 
-- **No ORM (Prisma/Drizzle):** the Supabase JS client's query builder plus generated types from the live schema covers the CRUD this template needs. An ORM would add a second schema representation to keep in sync with the SQL migrations for no functional gain here.
-- **No Redux or other global client-state library:** the app is server-component-heavy with small, local client state (forms, toggles). There's no cross-cutting client state that justifies a store.
-- **No GraphQL:** there's exactly one client (this app). REST-shaped Route Handlers and Server Actions are simpler and sufficient.
-- **No Redis:** webhook idempotency is handled with a Postgres unique-key ledger (§6); there's no caching or rate-limiting need yet that would justify a second managed data store.
-- **No Docker for app development:** the Supabase CLI manages its own local Postgres; the Next.js app itself needs no containerization for local dev or for Vercel's build.
-- **No microservices or separate backend:** Route Handlers in the same Next.js app are the backend. Splitting this out has no benefit at this scale and would reintroduce the operational overhead the brief explicitly asks to avoid.
-- **No plugin/event-emitter framework for optional modules:** a plain object literal mapping Stripe event type → handler function is sufficient for modules to register extra behavior. A pub/sub abstraction would be solving a problem this template doesn't have yet.
-- **No embedded Stripe Elements / client-side Stripe.js:** redirect-based Checkout and Portal cover subscription billing fully and remove an entire dependency plus PCI/CSP surface area; embeddable checkout is a legitimate future enhancement, not a core need.
+- No ORM (Prisma/Drizzle).
+- No Redux or other global client-state library.
+- No GraphQL.
+- No Redis — webhook idempotency is handled with Postgres atomic insert.
+- No Docker for app development.
+- No microservices or separate backend.
+- No plugin/event-emitter framework for optional modules.
+- No embedded Stripe Elements / client-side Stripe.js.
 
 ### 16.3 Smallest Viable Core
 
-Everything in §1–§8 (architecture, directories excluding `modules/*`, schema, auth, billing flow, webhook handling, entitlements, security) plus the test suite (§11) and deploy setup (§12) is the floor — removing any one of these breaks either "subscription SaaS" or "safe to run solo." Nothing in the mandatory feature list was found to be droppable. The places where the _scope within_ a mandatory feature was genuinely negotiable — testing depth, Stripe Customer provisioning timing, which auth methods ship in the UI, whether billing ownership gets an indirection point now, and how migrations get applied — were the five items surfaced as decisions rather than cut unilaterally; all five are now resolved in §17 and folded into §1–§12 above as the approved design.
+See §15. Nothing in §1–§8 was found to be droppable. The five items negotiated as decisions (testing depth, provisioning timing, auth methods, billing ownership abstraction, migration application) are resolved in §17 and reflected in §1–§15.
 
 ---
 
 ## 17. Decisions Record
 
-Five decisions were flagged in the previous revision of this plan as requiring approval rather than being made unilaterally. All five have now been decided and are recorded below, along with the trade-off each one accepts. §2–§16 above have been updated to reflect these as the approved design, not open questions.
-
 ### 1. Testing depth
 
-**Decision:** Vitest for unit and integration tests (including a mocked Checkout-flow integration test, §11). Playwright for core navigation and authentication behavior only (signup, login, logout, route protection). No Playwright test drives a live Stripe Checkout page in the core template; a manual live-Stripe verification procedure is documented in `README.md` instead.
+**Decision:** Vitest for unit and integration tests (including mocked checkout-flow and portal-flow integration tests, idempotency state-machine tests, and `invoice.paid` and failure/retry tests per §11). Playwright for core navigation and authentication behavior including forgot-password and password-recovery flows. No Playwright test drives a live Stripe Checkout page in the core template; a manual live-Stripe verification runbook is documented in `README.md` instead.
 
-**Trade-off accepted:** this buys confidence in the app's own logic (auth gating, the checkout request's idempotency and validation) without taking on the flakiness and CI cost of automating a third-party hosted page, and without needing live/test Stripe keys sitting in CI. The cost is that a live Stripe-side integration break (e.g. Stripe changing Checkout's behavior, or a webhook misconfiguration in the actual Stripe dashboard) will not be caught automatically — it's caught the next time the manual runbook is run. This is judged acceptable because the manual procedure is cheap to run before major billing changes or a production release, and because full checkout-page automation was the single most expensive item to maintain relative to what it would have caught.
+**Trade-off accepted:** buys confidence in the app's own logic without live Stripe keys in CI. A live Stripe-side integration break will not be caught automatically — caught when the manual runbook is run. Judged acceptable for a solo founder running the procedure before major billing changes or a production release.
 
 ### 2. Stripe Customer provisioning timing
 
-**Decision:** Lazy provisioning only. No Stripe Customer or `customers` row is created at signup. `getOrCreateStripeCustomer(userId)` is the single, idempotent resolver called by both the checkout and portal Route Handlers on first use, and it is safe under concurrent calls (§13 details the upsert-on-conflict mechanism).
+**Decision:** Lazy provisioning only. `getOrCreateStripeCustomer(userId)` is the single idempotent resolver in `lib/billing/repository.ts`, called by both checkout and portal handlers. It uses an upsert-on-conflict for local uniqueness (see §7).
 
-**Trade-off accepted:** signup stays minimal — no DB trigger or edge function needs to call out to Stripe synchronously during account creation, which removes a failure mode from the signup path entirely (a Stripe API hiccup can no longer break signup). The cost is a small amount of latency the _first_ time a user hits Checkout or the Portal (one extra Stripe API call inline), and the idempotency handling described in §13 has to exist and be tested (`checkout-flow.test.ts`, §11) rather than being sidestepped by "it only ever happens once, at signup, single-threaded."
+**Trade-off accepted:** signup stays minimal; no Stripe API call on the signup path removes a failure mode. Cost is a small first-use latency and the idempotency handling that must exist and be tested. A rare true-concurrent race may leave at most one orphaned Stripe Customer object — this is not strict external API idempotency and no distributed lock is used; accepted at this scale.
 
 ### 3. Authentication
 
-**Decision:** Email/password only in the initial UI. The auth module is structured so magic-link and OAuth providers can be added later without touching the database schema or route structure — a single method-list extension point in the auth form component, documented in `README.md`/`CLAUDE.md` (§4 has the detail). No OAuth buttons or provider-specific configuration ship in core.
+**Decision:** Email/password only in the initial UI, plus the forgot-password / password-recovery flow (§4). The auth module is structured so magic-link and OAuth can be added later without touching the database schema or route structure.
 
-**Trade-off accepted:** the initial auth surface is as small as possible to build, test (Playwright, §11), and reason about, and adding a provider later is additive (new method in the list, new Supabase dashboard config) rather than a redesign — because Supabase Auth's `auth.users` and the session/middleware mechanism are already provider-agnostic, this cost was low to design for up front. The cost is that a founder who wants "Sign in with Google" on day one has to add it themselves following the documented extension point rather than toggling a flag; this was accepted because provider buttons are UI + dashboard config work specific to which providers a given product wants, which is product-specific decoration this template shouldn't guess at.
+**Trade-off accepted:** initial auth surface is as small as possible. Adding a provider later is additive. A founder wanting OAuth on day one must add it following the documented extension point.
 
 ### 4. Teams and billing ownership
 
-**Decision:** `subscriptions`, `customers`, and entitlements stay strictly user-scoped in the core template. No workspaces, teams, invitations, or organization-owned billing are implemented. Billing code is structured so a future workspace owner can replace the billing-owner lookup without rewriting Stripe webhook processing — via the single `getBillingOwnerId` resolver described in §7, which in core simply returns the user id unchanged.
+**Decision:** Subscriptions, customers, and entitlements stay strictly user-scoped in the core template. `getUserBillingOwnerId` provides a single code indirection point. Future organization billing requires a schema migration, RLS rewrite, and data migration — the indirection point does not substitute for these (§7, §9).
 
-**Trade-off accepted:** this keeps the core schema and RLS policies as simple as they can be (§3, §8) and defers all of the real complexity of Teams — membership tables, invitation flows, org-scoped RLS, and the actual data migration of existing `subscriptions.user_id` values to an owner id — to if and when it's genuinely needed, rather than building it speculatively. The one concession made now is the indirection point itself: every call site that currently means "the user" resolves through `getBillingOwnerId` instead of hardcoding `auth.uid()`, which is a small, cheap abstraction (one function, returns its input in core) that narrows a future Teams migration to that resolver plus the tables/policies, rather than a hunt through every Stripe call site in the codebase. This was judged worth the minor indirection cost precisely because the alternative — retrofitting it later — touches billing code, which is the highest-blast-radius code in the app to get wrong.
+**Trade-off accepted:** core schema and RLS remain as simple as possible. The real complexity of Teams is deferred. The indirection point narrows the code blast radius but explicitly does not promise a configuration-only upgrade path.
 
 ### 5. Migration application
 
-**Decision:** Manual Supabase migration deployment for now. `README.md`/deployment docs specify the exact commands (`supabase migration list`, `supabase db reset` for local, `supabase db push --dry-run` then `supabase db push` for remote). No CI workflow applies production migrations yet. A TODO is recorded describing a future GitHub Actions workflow, gated behind a protected/approval-required GitHub Environment, that would run `supabase db push` against production only on explicit human approval.
+**Decision:** Manual Supabase migration deployment for now (§12), with an explicit destructiveness warning for `supabase db reset` and a documented migration-ordering discipline (apply migrations before deploying dependent code). A TODO records a future CI-approval-gated workflow.
 
-**Trade-off accepted:** this avoids putting a database credential capable of altering production schema into CI before it's actually needed, and avoids building/maintaining a pipeline for a step a solo founder can run in one command. The cost is the drift risk noted in §13 — a founder can forget to push a migration before or after deploying dependent code — partially mitigated by making `migration list` and `--dry-run` part of the documented habit rather than optional. The future CI workflow is written down as a TODO with its exact intended safety property (explicit approval gate, not automatic-on-merge) so that when it is built, it's built to the same "no silent production writes" standard the rest of this plan holds to, rather than being added hastily later under time pressure.
+**Trade-off accepted:** avoids putting a production-schema-altering credential into CI before it's needed. Cost is drift risk if the founder skips the migration step; `migration list` and `--dry-run` are the primary mitigations.
+
+---
+
+## 18. Open Issues
+
+_This section exists only to record decisions that are **genuinely unresolved** at the time of this document version. It must be removed or emptied once all items are resolved._
+
+Currently no open issues. All in-scope decisions have been resolved in §17. The following are acknowledged future concerns, not open decisions for the core template:
+
+- Whether to add a Stripe webhook event for `customer.subscription.trial_will_end` (for trial-ending notifications) — deferred to when a product actually uses trials.
+- Whether RLS tests against local Supabase should run in CI automatically or remain a local-only step — deferred to when a CI environment configuration is chosen.
