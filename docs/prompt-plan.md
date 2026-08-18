@@ -236,6 +236,10 @@ For every proposed dependency state why it is needed, whether it belongs in core
 Before finishing: identify contradictions, unnecessary complexity, and ask no more than five decisions that require my approval.
 ```
 
+### Note - This stage was redone by Perplexity Pro after Claude at beginning of project
+
+Refer to `docs/stage1-version-comparison.md` for notes on what changed and why the latest iteration is better.
+
 ### Completed record
 
 After Stage 1 is done, review and correct before any application code is written:
