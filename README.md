@@ -1,5 +1,7 @@
 # SaaS Starterpack
 
+[![CI](https://github.com/carriegale2710/saas-starterpack/actions/workflows/ci.yml/badge.svg)](https://github.com/carriegale2710/saas-starterpack/actions/workflows/ci.yml)
+
 A minimal, maintainable modular monolith for solo-founder subscription SaaS products.
 
 ## Features
