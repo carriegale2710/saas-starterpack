@@ -281,3 +281,9 @@ export const Constants = {
     },
   },
 } as const
+
+// ---------------------------------------------------------------------------
+// Convenience aliases — use these instead of the verbose Enums<> generic.
+// ---------------------------------------------------------------------------
+export type SubscriptionStatus = Enums<'subscription_status'>
+export type WebhookEventStatus = Enums<'webhook_event_status'>
