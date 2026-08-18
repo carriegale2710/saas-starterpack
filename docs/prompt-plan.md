@@ -348,6 +348,10 @@ git add docs/implementation-plan.md docs/schema.md docs/decisions.md README.md C
 git commit -m "stage 1: architecture plan"
 ```
 
+## Note - This stage was redone by Perplexity Pro after Claude at beginning of project
+
+Refer to `docs/archive/stage1-version-comparison.md` for notes on what changed and why the latest iteration is better.
+
 ---
 
 # Stage 2: Project Foundation

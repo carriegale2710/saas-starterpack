@@ -1,6 +1,6 @@
 # Stage 1 Version Comparison: Claude Iterations vs Final Starter
 
-Stage 1 in `docs/prompt-plan.md` was redone in Perplexity Pro and rewrote over original files generated in first pass by Claude. Before proceeding I have asked Perplexity to justify the changes to the files below. Earlier information from previous files have been condensed into `docs/reference-only.md` for preservation for later stages where they made be useful.
+Stage 1 in `docs/prompt-plan.md` was redone in Perplexity Pro and rewrote over original files generated in first pass by Claude. Before proceeding I have asked Perplexity to justify the changes to the files below. Earlier information from previous files have been condensed into `docs/archive/reference-only.md` for preservation for later stages where they made be useful.
 
 ## Verdict
 
