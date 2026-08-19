@@ -196,24 +196,34 @@ export type { <ModuleType> };
 
 ## 12. Stripe SDK & API Version Pinning
 
-**Decision:** Pin both the Stripe Node SDK version in `package.json` and the API version string in `.env.local`; upgrade them together deliberately
+**Decision:** Pin `stripe@17` in `package.json` and API version `2025-11-20.acacia` in `.env`; upgrade them together deliberately.
 
-**Context:** The Stripe Node SDK version and the API version string are separate but coupled. A mismatch can cause type errors or runtime failures on webhook events. Both must be tested together before deploying.
+**Context (verified 2026-08-19 via Perplexity):**
+The Stripe Node SDK version and the API version string are separate but coupled. As of August 2026:
+
+- **npm latest: `stripe@17.x`** (maps to Stripe API `2026-01-28`)
+- **`stripe@18.x`** introduced a **breaking schema change** in API `2025-03-31.basil` — see Decision #16
+- **`stripe@17.x`** is safe; it uses APIs prior to the basil breaking change
+- We use `STRIPE_API_VERSION=2025-11-20.acacia` — the latest stable version before basil
+
+> ⚠️ The `.env.example` previously stubbed `2024-06-20`. This was outdated and has been corrected to `2025-11-20.acacia`.
 
 **Alternatives Considered:**
 
-| Alternative                 | Pros               | Cons                             | Verdict                 |
-| --------------------------- | ------------------ | -------------------------------- | ----------------------- |
-| Latest version (no pinning) | Always up-to-date  | Breaking changes without warning | Rejected — unsafe       |
-| Pin API version in env only | Easy env change    | SDK type mismatch on upgrade     | Rejected — insufficient |
-| Pin SDK + API version both  | Explicit, testable | Requires deliberate upgrade step | Accepted — correct      |
+| Alternative                  | Pros               | Cons                                         | Verdict                 |
+| ---------------------------- | ------------------ | -------------------------------------------- | ----------------------- |
+| `stripe@latest` (no pinning) | Always up-to-date  | v18+ breaks `current_period_start/end` field | Rejected — data loss    |
+| `stripe@18+`                 | Latest features    | Breaks DB schema (see Decision #16)          | Rejected — incompatible |
+| `stripe@17` + pinned API     | Explicit, testable | Requires deliberate upgrade step             | **Accepted**            |
 
 **Consequences:**
 
-- `package.json`: `"stripe": "16.x"` (or current stable major)
-- `.env.local`: `STRIPE_API_VERSION=2024-06-20`
-- Stripe SDK initialized with the validated env value
-- Upgrade process: update both, run full test suite, then deploy
+- `package.json`: `"stripe": "17.x"`
+- `.env` / `.env.example`: `STRIPE_API_VERSION=2025-11-20.acacia`
+- `lib/env.ts`: `STRIPE_API_VERSION` validated as `z.string().min(1)`
+- Stripe client initialised with `apiVersion: env.STRIPE_API_VERSION as Stripe.LatestApiVersion`
+- **Upgrade process:** update both `package.json` version and `STRIPE_API_VERSION` together, run full test suite, check Decision #16 compatibility, then deploy
+- Next safe review point: when upgrading to `stripe@18` — read Decision #16 first
 
 ---
 
@@ -279,6 +289,39 @@ export type { <ModuleType> };
 
 ---
 
+## 16. Stripe `current_period_start/end` Breaking Change (SDK v18 / API basil)
+
+**Decision:** Do not upgrade to `stripe@18` or API version `2025-03-31.basil` or later until the DB schema and webhook handler are updated to read period dates from `items.data[0]`.
+
+**Context (verified 2026-08-19 via Perplexity):**
+Stripe API version `2025-03-31.basil` (shipped with SDK v18) removed `current_period_start` and `current_period_end` from the **top-level subscription object**. They now live on each subscription item: `subscription.items.data[0].current_period_start` and `subscription.items.data[0].current_period_end`.
+
+This project's `subscriptions` table stores `current_period_start` and `current_period_end` as top-level columns, and the webhook handler in `lib/vendor/stripe/webhook.ts` reads these directly from `subscription.current_period_start` / `subscription.current_period_end`. Upgrading to `stripe@18` without updating the handler would silently write `undefined` / `null` into these columns for every subscription renewal.
+
+**What breaks on stripe@18+ / API 2025-03-31.basil:**
+
+| Location | Old path (v17, safe) | New path (v18+, basil) |
+|---|---|---|
+| `customer.subscription.updated` | `event.data.object.current_period_start` | `event.data.object.items.data[0].current_period_start` |
+| `customer.subscription.deleted` | `event.data.object.current_period_end` | `event.data.object.items.data[0].current_period_end` |
+| `invoice.paid` (expanded sub) | `subscription.current_period_start` | `subscription.items.data[0].current_period_start` |
+
+**Upgrade path (when ready):**
+1. Update `lib/vendor/stripe/webhook.ts` to read period dates from `items.data[0]`
+2. Update `lib/database.types.ts` if the column semantics change
+3. Update `tests/fixtures/webhook-events.ts` — fixtures must reflect new shape
+4. Bump `"stripe"` in `package.json` to `"18.x"`
+5. Update `STRIPE_API_VERSION` in `.env` and `.env.example` to `2025-03-31.acacia` or later
+6. Run `npm test` — all webhook tests must pass before deploying
+
+**Consequences:**
+
+- `stripe@17` is pinned until this migration is performed
+- A TypeScript compile error will surface naturally when upgrading (the `current_period_start` property disappears from the SDK types) — treat this as the reminder to complete the upgrade path above
+- Do **not** suppress the TS error with a cast (`as any`) — fix the handler properly
+
+---
+
 ## Risks & Mitigations
 
 | Risk                      | Likelihood | Impact | Mitigation                                            |
@@ -286,7 +329,8 @@ export type { <ModuleType> };
 | Webhook race conditions   | Medium     | High   | Atomic claim pattern, transaction boundary            |
 | Stale processing rows     | Low        | Medium | updated_at timeout recovery query                     |
 | RLS misconfiguration      | Low        | High   | Test policies, deny-by-default, no ambiguous policies |
-| Stripe API version drift  | Medium     | Medium | Pin SDK + API version, test on upgrade                |
+| Stripe API version drift  | Medium     | Medium | Pin SDK + API version (Decision #12), upgrade checklist (Decision #16) |
+| Stripe basil upgrade      | Low        | High   | Decision #16 upgrade path; TS types will surface error naturally |
 | Vendor lock-in (Supabase) | High       | Medium | Standard SQL, exportable data                         |
 | Vercel cold starts        | Medium     | Low    | Pro tier, optimize bundle size                        |
 | Nav config dropped in rewrite | Low    | High   | Covered by `tests/config.test.ts` + `tests/nav.test.ts` |
