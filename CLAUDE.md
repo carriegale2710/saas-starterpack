@@ -1,5 +1,9 @@
 # CLAUDE.md — Implementation Rules
 
+<!-- This file owns: coding rules, security constraints, directory structure, naming conventions. -->
+<!-- It does NOT own: version numbers, risk tables, ADR rationale — those live in docs/decisions.md. -->
+<!-- Before every stage: verify this file is consistent with docs/decisions.md and docs/implementation-plan.md. -->
+
 ## Project Context
 
 This is a **minimal, maintainable modular monolith** for solo-founder subscription SaaS products. Every decision prioritizes shipping speed, maintainability, and security.
@@ -256,17 +260,14 @@ const envSchema = z.object({
 
 ### 7. Stripe SDK & API Version Pinning
 
+<!-- sync: docs/decisions.md Decision #12 and Decision #16 own the specific version values. -->
+<!-- Do not hardcode version numbers here — always read them from decisions.md. -->
+
 Pin **both** the Node SDK version in `package.json` and the API version string in `.env.local`. Upgrade them together and run the full test suite before deploying.
 
-```json
-// package.json — pin an exact version, not a range
-"stripe": "16.3.0"
-```
-
-```bash
-# .env.local
-STRIPE_API_VERSION=2024-06-20
-```
+> **Current pinned values:** See [`docs/decisions.md` Decision #12](./docs/decisions.md) for the SDK version (`stripe@17.x`) and API version (`STRIPE_API_VERSION=2025-11-20.acacia`). Do not update those values here — update them in `decisions.md` only, which is the single source of truth.
+>
+> **⚠️ Before upgrading to `stripe@18`:** Read Decision #16 first — it documents a breaking schema change that affects `current_period_start/end` field paths.
 
 ```typescript
 // lib/vendor/stripe/client.ts
@@ -356,27 +357,28 @@ All three must pass before merging. Do not bypass CI.
 
 ---
 
+## Keeping This File Fresh
+
+This file owns **rules**, never **values**. Specific version numbers, risk tables, and ADR rationale live in `docs/decisions.md`.
+
+- When a convention changes → update this file **and** `docs/decisions.md`
+- When a version changes → update `docs/decisions.md` Decision #12 only; this file points there
+- When starting a new stage → re-read this file and verify it matches `docs/decisions.md`
+- Sections marked `<!-- sync: decisions.md -->` mirror a value owned elsewhere — check them first when upgrading dependencies
+
+> Risks and non-goals are documented in [`docs/decisions.md`](./docs/decisions.md) — not here.
+
+---
+
 ## Decisions Requiring Your Approval
+
+<!-- sync: docs/decisions.md "Decisions Requiring Approval" section owns the canonical list -->
 
 1. **Database Schema:** Are the `profiles`, `subscriptions`, and `webhook_events` tables sufficient?
 2. **Webhook Pattern:** Is the atomic DB-based claim acceptable, or do you prefer Redis for performance?
 3. **Optional Modules:** Which modules do you need in the next 6 months?
 4. **Testing Strategy:** Is Vitest + 70% coverage appropriate?
 5. **Deployment:** Is Vercel + Supabase your preferred stack?
-
----
-
-## Potential Risks
-
-| Risk                      | Mitigation                                      |
-| ------------------------- | ----------------------------------------------- |
-| Webhook race conditions   | Atomic claim + transaction boundary             |
-| Stale processing rows     | updated_at timeout recovery query (see README)  |
-| RLS misconfiguration      | Test policies, deny-by-default                  |
-| Stripe API version drift  | Pin SDK + API version together, test on upgrade |
-| Vendor lock-in (Supabase) | Standard SQL, exportable data                   |
-| Vercel cold starts        | Pro tier, optimize bundle size                  |
-| Node.js deprecation       | Target Node 22 LTS; Node 20 deprecated Oct 2026 |
 
 ---
 

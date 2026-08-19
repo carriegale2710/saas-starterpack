@@ -23,7 +23,7 @@ These conventions apply throughout every stage:
 - The initial database migration is `supabase/migrations/0001_initial.sql`.
 - The service-role key bypasses RLS entirely. Do not create `auth.uid() IS NULL` policies.
 - `past_due` denies premium access by default. Controlled centrally by `lib/config.ts`.
-- Pin the Stripe Node SDK in `package.json` and record the Stripe API version in `STRIPE_API_VERSION`.
+- Pin the Stripe Node SDK in `package.json` and record the Stripe API version in `STRIPE_API_VERSION`. Current pinned values are in `docs/decisions.md` Decision #12.
 - Workspaces and usage-based billing may require core-table relationships or billing-owner changes; they are not automatically schema-neutral.
 - Nav links live in `lib/config.ts` only — never duplicate them in component files.
 - `lib/database.types.ts` is generated from the live schema — regenerate after every migration.
@@ -42,6 +42,7 @@ Perplexity Pro must update the following files as part of completing each stage 
 | `CHANGELOG.md` | Any commit with functional or structural changes |
 | `README.md` | Routes, env vars, setup steps, or stack changed |
 | `CLAUDE.md` | Convention added, renamed, or removed |
+| `docs/decisions.md` | Any version number, risk, or ADR rationale changes |
 | `tests/README.md` | Test files added, changed, or skeleton activated |
 
 ---
@@ -50,16 +51,16 @@ Perplexity Pro must update the following files as part of completing each stage 
 
 The architecture stage produces a split documentation set:
 
-- `docs/implementation-plan.md` — concise execution checklist (living)
+- `docs/implementation-plan.md` — concise execution checklist (living); phases, gates, task lists only
 - `docs/schema.md` — authoritative database contract
-- `docs/decisions.md` — approved architectural choices (ADRs)
+- `docs/decisions.md` — approved architectural choices (ADRs), risks, non-goals, pinned version values
 - `docs/prompt-plan.md` — this file (living)
 - `README.md` — setup, operations, migration, deployment, and rationale
-- `CLAUDE.md` — implementation conventions and non-negotiable security rules
+- `CLAUDE.md` — implementation conventions and non-negotiable security rules; points to `decisions.md` for version values
 - `CHANGELOG.md` — versioned change log
 - `tests/README.md` — test suite documentation
 
-Later stages must read the relevant documents and update all affected files when implementation changes a decision or contract.
+**Single-ownership rule:** version numbers and risks live in `docs/decisions.md` only. `CLAUDE.md` and `implementation-plan.md` reference them; they do not duplicate them.
 
 ---
 
@@ -83,11 +84,12 @@ Later stages must read the relevant documents and update all affected files when
 For every stage, follow this loop:
 
 1. **Perplexity Pro** — research current requirements, vendor docs, and breaking changes. Update `docs/` if a decision changes.
-2. **GitHub MCP** — implement the stage directly via file commits. Read the repository before editing.
-3. **Local tools** — run tests and verification commands.
-4. **Perplexity Pro, if needed** — independently review issues involving Stripe, Supabase, RLS, security, or current external APIs.
-5. **Git** — review `git diff` before committing.
-6. **Perplexity Pro** — update all living documents as part of the stage close, not as a later cleanup.
+2. **Read `CLAUDE.md` and `docs/decisions.md`** — verify they are consistent and up to date before writing any code.
+3. **GitHub MCP** — implement the stage directly via file commits. Read the repository before editing.
+4. **Local tools** — run tests and verification commands.
+5. **Perplexity Pro, if needed** — independently review issues involving Stripe, Supabase, RLS, security, or current external APIs.
+6. **Git** — review `git diff` before committing.
+7. **Perplexity Pro** — update all living documents as part of the stage close, not as a later cleanup.
 
 ---
 
@@ -626,8 +628,11 @@ Update `docs/decisions.md`, `docs/schema.md`, and `README.md` before implementat
 
 ## Confirmed Versions (researched 2026-08-19)
 
-- **Stripe Node SDK:** `stripe@16.3.0` (pin exact in `package.json`)
-- **Stripe API version:** `2025-01-27.acacia` — use whatever ships with the pinned SDK
+<!-- sync: docs/decisions.md Decision #12 is the single source of truth for these values -->
+
+- **Stripe Node SDK:** `stripe@17.x` — pin in `package.json`. See [Decision #12](./decisions.md).
+- **Stripe API version:** `STRIPE_API_VERSION=2025-11-20.acacia` — latest stable pre-basil version. See [Decision #12](./decisions.md).
+- **⚠️ Do not upgrade to `stripe@18`** without reading [Decision #16](./decisions.md) — breaking schema change affecting `current_period_start/end` field paths.
 - **Webhook events:** 5 entitlement events confirmed correct (see fixtures)
 
 ## Implementation Prompt
@@ -664,7 +669,7 @@ Add to .env.example, lib/env.ts Zod schema, tests/setup.ts stubs, AND .github/wo
   STRIPE_SECRET_KEY=sk_test_placeholder
   STRIPE_WEBHOOK_SECRET=whsec_placeholder
   STRIPE_PRICE_ID_PRO=price_placeholder
-  STRIPE_API_VERSION=2025-01-27.acacia
+  STRIPE_API_VERSION=2025-11-20.acacia
 
 ## Webhook requirements
 - Verify Stripe signature — reject invalid with 400
@@ -846,6 +851,7 @@ Verify:
 - Stale-processing recovery
 - Default `past_due` denial policy
 - Workspaces and usage-billing schema-impact warnings
+- **`CLAUDE.md` consistent with `docs/decisions.md`** — check all `<!-- sync -->` markers
 
 Apply documentation corrections before the implementation step.
 
