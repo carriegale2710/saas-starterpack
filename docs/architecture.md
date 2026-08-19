@@ -60,13 +60,16 @@ Browser → middleware.ts
 ```text
 Stripe POST /api/stripe/webhook
   → verify signature
-  → insert into webhook_events (status: 'processing')
+  → insert into webhook_events (status: 'pending')
+  → claim event (status: 'processing')
   → entitlement event? → upsert subscriptions table
                            update webhook_events (status: 'processed')
                            [both writes in one DB transaction]
   → other event?      → update webhook_events (status: 'processed')
   → return 200
 ```
+
+Full SQL and stale-processing recovery → [`docs/schema.md` → Atomic Webhook Processing](./schema.md#atomic-webhook-processing)
 
 ### Checkout flow
 
@@ -102,36 +105,20 @@ Password reset: /forgot-password → resetPasswordForEmail()
 subscriptions.status + BILLING_CONFIG.pastDueGracePeriod
   → lib/entitlements.ts
   → hasAccess: boolean
-
-active / trialing          → true
-past_due                   → BILLING_CONFIG.pastDueGracePeriod (default: false)
-canceled / incomplete / *  → false
 ```
 
 Never check subscription status inline in components or routes — always go through `lib/entitlements.ts`.
 
----
-
-## Key Architectural Decisions (summary)
-
-| Decision | Choice |
-|---|---|
-| Subscription source of truth | Stripe webhooks only — never client-side |
-| RLS default | Deny all, then explicit allow per table |
-| Service-role key | Server-only — never in client bundle |
-| Entitlement logic | Centralised in `lib/entitlements.ts` |
-| Billing policy | Externalised to `lib/config.ts` `BILLING_CONFIG` |
-| Vendor isolation | All Supabase + Stripe code in `lib/vendor/` |
-
-Full rationale for each → [`docs/decisions.md`](./decisions.md)
+Status → access mapping → [`docs/schema.md` → Entitlement Logic](./schema.md#entitlement-logic)
 
 ---
 
-## Optional Module System
+## Architectural Decisions
 
-Optional features scaffold into `lib/modules/<name>/` and:
-- Export `init()` + their own types
-- Own their own migrations (no modifying core tables, with noted exceptions)
-- Can be deleted without breaking core
+See [`docs/decisions.md`](./decisions.md) for all architectural decisions and rationale.
 
-See `docs/guides/adding-a-module.md` when ready to add one.
+---
+
+## Optional Modules
+
+Optional features scaffold into `lib/modules/<name>/`. See [`docs/guides/adding-a-module.md`](./guides/adding-a-module.md) for the full contract and scaffold steps.
