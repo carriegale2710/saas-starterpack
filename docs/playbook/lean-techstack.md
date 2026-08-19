@@ -52,6 +52,28 @@ Important factors to keep in mind when building a solo developer.
 
 ---
 
+## Reddit post I agree with:
+
+> "
+> I’ll say it plainly because I’m tired of “it depends”.
+>
+> If you’re a solo dev building a SaaS in 2026 and you want to move fast without turning your project into a maintenance job, I think the best stack right now looks roughly like this:
+>
+> \- I run everything as a monorepo using Bun and Turborepo. Separate packages for the web app, landing/blog, mobile wrapper, database layer, shared UI, analytics, docs, etc. Clear boundaries, shared types, but still one place to reason about the whole system.  
+> \- Next.js + React + TypeScript for the core app, with backend logic kept inside the same codebase. Not because it’s perfect architecture, but because one repo and one mental model matter more than theoretical purity when you’re solo.  
+> \- Astro for the landing page and blog, so marketing content stays fast and simple and doesn’t leak complexity into the app.  
+> \- Supabase for Postgres, auth, and storage because it gets you to a real product quickly, with Prisma on top so schema changes don’t become a source of stress.  
+> \- Tailwind + shadcn/ui because you need consistency and speed, not a custom design system you’ll abandon in two weeks. (+ TweakCN to customize styles)  
+> \- Stripe for payments if you can use it. I personally use Polar because Stripe isn’t available in my country, and honestly it’s been solid and removes a lot of billing overhead.  
+> \- n8n for automations and cron jobs outside the app, so background logic doesn’t bloat your main codebase.  
+> \- Capacitor if you need mobile access without committing to full native development.  
+> \- Vercel for hosting because it’s boring and works, Cloudflare for domains, DNS, and email routing for the same reason. Hetzner VPS if you need more than what Vercel offers for free.  
+> \- On top of that, AI tooling matters now. Cursor + MCPs has become part of the stack for me, not just an editor, but as a 10x productivity booster for everything: ideation, research, planning, design, development, content creation, documentation.
+>
+> "
+
+---
+
 ## Deep dive into the stack + Alternatives
 
 ### Core Framework: Next.js + Typescript
