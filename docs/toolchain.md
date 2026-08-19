@@ -1,15 +1,16 @@
 # Toolchain Guide
 
+> This file outlines the core AI techstack and workflow chosen to build this project.
 > **Why this setup?** See [Decision #17 in `docs/decisions.md`](./decisions.md#17-ai-toolchain-perplexity-pro--claude-sonnet-5--github-mcp) for the full rationale and rejected alternatives.
 
 ## Current Setup
 
-| Tool | Role |
-|---|---|
+| Tool                                       | Role                                                                                    |
+| ------------------------------------------ | --------------------------------------------------------------------------------------- |
 | **Perplexity Pro** (Claude Sonnet 5 model) | Research, architecture review, living-doc maintenance, per-stage workflow orchestration |
-| **GitHub MCP connector** | Direct file commits, code implementation, repository management |
-| **Supabase MCP connector** | Database introspection, schema verification, RLS validation |
-| **Local tools** | Git, VS Code, Supabase CLI, Stripe CLI, Vitest, Playwright |
+| **GitHub MCP connector**                   | Direct file commits, code implementation, repository management                         |
+| **Supabase MCP connector**                 | Database introspection, schema verification, RLS validation                             |
+| **Local tools**                            | Git, VS Code, Supabase CLI, Stripe CLI, Vitest, Playwright                              |
 
 ## Model Selection
 

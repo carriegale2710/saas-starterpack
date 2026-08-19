@@ -1,6 +1,7 @@
 # Architectural Decision Log
 
-Key architectural decisions, trade-offs, and rejected alternatives for the SaaS starter repo.
+> Purpose: Living document of key architectural decisions, trade-offs, and rejected alternatives for the SaaS starter repo.
+> Explains why things are the way they are.
 
 ## Table of Contents
 

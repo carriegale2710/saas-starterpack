@@ -1,13 +1,14 @@
 # Changelog
 
-All notable changes to this project will be documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+> All notable changes to this project will be documented here. It does NOT record reasons for changes - those go in `docs/decisions.md`
+> Follow this format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Ensure each change fits on a single line, do not overbloat.
 
 ---
 
 ## [Unreleased]
 
 ### Added
+
 - `AGENTS.md` — tool-agnostic agent orientation layer for Cursor, Copilot, Windsurf, and Claude Code
 - `docs/architecture.md` — system layer diagram, request flow sequences, and entitlement logic chain
 - `docs/guides/adding-a-module.md` — guide for scaffolding and removing optional feature modules
@@ -15,6 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - ADR-18 in `docs/decisions.md` — layered documentation strategy and single-ownership principle
 
 ### Changed
+
 - `CLAUDE.md` — DRY pass: removed duplicated content now owned by `schema.md`, guides, and `decisions.md`; trimmed verbose prose sections
 - `docs/README.md` — consolidated reading order and reference index into a single numbered table
 - `docs/schema.md` — removed stale sections; trimmed repeated explanations to single canonical locations
@@ -30,12 +32,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Pre-Phase-2 cleanup and test scaffolding. No functional changes.
 
 ### Added
+
 - `tests/fixtures/subscriptions.ts` — typed `MockSubscription` fixtures for all 8 subscription statuses
 - `tests/fixtures/webhook-events.ts` — Stripe event payloads for all 5 entitlement-controlling events plus ignored event fixtures
 - `tests/webhook.test.ts` — skeleton suite: idempotency, event routing, stale-processing recovery
 - `tests/billing.test.ts` — skeleton suite: checkout session contract, subscription fixtures, `BILLING_CONFIG` policy assertions
 
 ### Changed
+
 - `.github/workflows/ci.yml` — refactored to 3 parallel jobs: `validate` → `build` + `test`; shared `env:` block; `npm run build` added to CI
 - `tests/README.md` — updated with fixture docs and CI job diagram
 - `README.md` — corrected Node.js (22 LTS) and Next.js (15) versions; split env vars table by phase; fixed `BILLING_CONFIG` reference
@@ -48,6 +52,7 @@ Pre-Phase-2 cleanup and test scaffolding. No functional changes.
 Phase 1 complete. Foundation stable, all tests passing, CI green.
 
 ### Added
+
 - Next.js 15 App Router with TypeScript strict mode, Tailwind CSS, and shadcn/ui-style components
 - Supabase integration: browser client, server client, SSR middleware
 - Database schema: `profiles`, `subscriptions`, `webhook_events` with RLS policies and initial migration
@@ -64,6 +69,7 @@ Phase 1 complete. Foundation stable, all tests passing, CI green.
 - `docs/schema.md` — full database schema documentation
 
 ### Architecture Decisions (ADR-1 – ADR-17)
+
 - Modular monolith, Supabase PostgreSQL with RLS, Stripe webhooks as source of truth
 - Atomic webhook claim (no Redis), shadcn/ui-style components, Next.js App Router
 - No ORM, Zod env validation, npm, optional module boundaries, mandatory RLS

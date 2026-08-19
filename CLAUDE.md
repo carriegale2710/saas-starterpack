@@ -326,9 +326,11 @@ All three must pass before merging.
 
 ---
 
-## Documentation Hygiene
+## Documentation File Hygiene
 
 ## Scope and Separation of Concerns
+
+Use this to decide where to write any new documentation notes. Keep related logic and area of concern in one file. Stay within the file's scope.
 
 | File                          | Answers                                                    | Does NOT answer                                             |
 | ----------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
@@ -344,14 +346,25 @@ All three must pass before merging.
 | `CHANGELOG.md`                | What changed, and in which version?                        | Why did it change? _(→ `docs/decisions.md`)_                |
 | `tests/README.md`             | How is the test suite organized and run?                   | What implementation rule is being tested? _(→ `CLAUDE.md`)_ |
 
-### Rules for writing documentation
+### Writing and editing documentation files
 
-- Move content once, link from elsewhere — never copy.
+#### Principles
+
+- Each file owns one concern. Move content once, link from elsewhere — never copy.
+- Examples are better than descriptions.
+- Accurate beats complete. Reduce risks for stale or outdated docs.
+- Keep it simple stupid. Remove verboseness where possible. Keep lean and readable.
+- Keep it DRY, reduce redunancy and info overlap between docs.
+
+#### Rules
+
+- Fix factual doc bugs immediately when found.
 - Version numbers and risks live in `docs/decisions.md` only; `CLAUDE.md` and `docs/implementation-plan.md` reference them, never duplicate them.
 - `AGENTS.md`'s constraints section is a summary with links, not a copy.
 - The directory tree in `CLAUDE.md` Section 1 is the single source of truth for repo structure; update it in the same commit that adds, moves, or deletes any file or folder.
 - Re-run the DRY audit after major structural changes (trigger phrase: "audit documentation for DRYness").
-- Fix factual doc bugs immediately when found.
+
+> For big documentation edits, refer to `docs/guides/ai-agent-tips.md` for more documentation principles and best practices.
 
 ## Keeping This File Fresh
 

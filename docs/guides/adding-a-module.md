@@ -7,6 +7,7 @@ Optional modules live in `lib/modules/<name>/`. They extend the starter without 
 ## When to Use a Module
 
 Use a module when the feature:
+
 - Has its own database tables
 - Can be removed without breaking core auth, billing, or dashboard
 - Is not needed in every deployment of this starter
@@ -56,17 +57,20 @@ mkdir -p lib/modules/<name>
 ### 2. Add env vars (if needed)
 
 `.env.example`:
+
 ```bash
 # <Name> module
 YOUR_MODULE_API_KEY=
 ```
 
 `lib/env.ts` (add as optional — core must boot without it):
+
 ```typescript
 YOUR_MODULE_API_KEY: z.string().min(1).optional(),
 ```
 
 `tests/setup.ts` stub:
+
 ```typescript
 process.env.YOUR_MODULE_API_KEY = 'test-key';
 ```
@@ -84,7 +88,7 @@ export function init(): void {
   // initialise SDK
 }
 
-export type YourModuleType = { /* ... */ };
+export type YourModuleType = {/* ... */};
 ```
 
 ### 4. Add a migration (if you need new tables)
@@ -105,6 +109,7 @@ CREATE POLICY "Users can access own rows"
 ```
 
 Then regenerate types:
+
 ```bash
 npx supabase gen types typescript --project-id <project-ref> > lib/database.types.ts
 ```
@@ -112,14 +117,17 @@ npx supabase gen types typescript --project-id <project-ref> > lib/database.type
 ### 5. Write tests
 
 Create `tests/<name>.test.ts`. At minimum cover:
+
 - `init()` with and without the API key set
 - Core logic functions
 
 ### 6. Log the decision
 
 Add an entry to `docs/decisions.md`:
+
 ```markdown
 ## Decision #N — Add <Name> Module
+
 **Date:** YYYY-MM-DD
 **Status:** Accepted
 **Context:** ...
