@@ -42,7 +42,7 @@ Perplexity Pro must update the following files as part of completing each stage 
 | `CHANGELOG.md` | Any commit with functional or structural changes |
 | `README.md` | Routes, env vars, setup steps, or stack changed |
 | `CLAUDE.md` | Convention added, renamed, or removed |
-| `docs/decisions.md` | Any version number, risk, or ADR rationale changes |
+| `docs/decisions.md` | Any version number, risk, ADR rationale, or architectural choice changed |
 | `tests/README.md` | Test files added, changed, or skeleton activated |
 
 ---
@@ -61,6 +61,23 @@ The architecture stage produces a split documentation set:
 - `tests/README.md` — test suite documentation
 
 **Single-ownership rule:** version numbers and risks live in `docs/decisions.md` only. `CLAUDE.md` and `implementation-plan.md` reference them; they do not duplicate them.
+
+---
+
+## Stage Close Checklist
+
+Run this at the end of **every stage** before the git commit. This is not optional.
+
+- [ ] All stage tasks and acceptance gates passed
+- [ ] `docs/decisions.md` — new ADRs recorded; version numbers and risks up to date
+- [ ] `CHANGELOG.md` — `[Unreleased]` section updated with all changes from this stage
+- [ ] `CLAUDE.md` — `<!-- sync: decisions.md -->` markers checked; conventions current
+- [ ] `docs/implementation-plan.md` — tasks ticked; gates marked; Living Document Policy followed
+- [ ] `docs/prompt-plan.md` — this file's stage checklist ticked; prompt updated if approach changed
+- [ ] `README.md` — routes, env vars, and setup steps still accurate
+- [ ] `tests/README.md` — test files and fixtures documented
+- [ ] `npm run validate` passes (lint + typecheck + tests)
+- [ ] `npm run build` passes
 
 ---
 
@@ -89,7 +106,7 @@ For every stage, follow this loop:
 4. **Local tools** — run tests and verification commands.
 5. **Perplexity Pro, if needed** — independently review issues involving Stripe, Supabase, RLS, security, or current external APIs.
 6. **Git** — review `git diff` before committing.
-7. **Perplexity Pro** — update all living documents as part of the stage close, not as a later cleanup.
+7. **Perplexity Pro** — run the Stage Close Checklist and update all living documents before the final commit.
 
 ---
 
@@ -345,6 +362,16 @@ Before finishing, identify contradictions and unnecessary complexity, and ask no
 
 > **Note:** Stage 1 was redone by Perplexity Pro after initial Claude attempt. See `docs/archive/stage1-version-comparison.md`.
 
+## Stage Close ✅
+
+- [x] `docs/decisions.md` — ADRs 1–16 recorded
+- [x] `CHANGELOG.md` — 0.1.0 entry complete
+- [x] `CLAUDE.md` — conventions current, sync markers in place
+- [x] `docs/implementation-plan.md` — Phase 1 fully checked off
+- [x] `docs/prompt-plan.md` — this checklist
+- [x] `README.md` — accurate
+- [x] `tests/README.md` — current
+
 ---
 
 # Stage 2: Project Foundation
@@ -447,6 +474,15 @@ This project uses Next.js 15. Apply these patterns:
 - [x] `.env.example`
 - [x] `README.md` and `CLAUDE.md` foundation
 - [x] Node 22 LTS pinned in `.nvmrc` and `package.json engines`
+
+## Stage Close ✅
+
+- [x] `docs/decisions.md` — ADR-6, ADR-7, ADR-9 confirmed
+- [x] `CHANGELOG.md` — 0.1.0 entry covers foundation work
+- [x] `CLAUDE.md` — directory structure, npm rule, env validation current
+- [x] `docs/implementation-plan.md` — Phase 1.1 checked off
+- [x] `README.md` — accurate
+- [x] `tests/README.md` — N/A this stage
 
 ---
 
@@ -590,6 +626,16 @@ Update README, docs/schema.md, and CLAUDE.md if new conventions are introduced.
 - [x] Zero authenticated-user policies on `webhook_events` — verified via `pg_policies` (0 rows)
 - [ ] Confirm service-role write to `webhook_events` works — **Phase 2.2 gate** (requires webhook handler to exist)
 
+## Stage Close ✅
+
+- [x] `docs/decisions.md` — ADR-11 (RLS), ADR-14 (nav), ADR-15 (setup.ts), ADR-16 (Stripe basil) recorded
+- [x] `CHANGELOG.md` — 0.1.0 and 0.1.1 entries cover all auth and test scaffold work
+- [x] `CLAUDE.md` — RLS rules, service-role boundary, nav convention current
+- [x] `docs/implementation-plan.md` — Phases 1.2, 1.3, 1.4, 1.5 checked off
+- [x] `docs/schema.md` — migration and RLS policies documented
+- [x] `README.md` — auth routes, env vars accurate
+- [x] `tests/README.md` — fixtures, skeletons, CI diagram documented
+
 ---
 
 # Stage 4: Stripe Billing
@@ -732,6 +778,20 @@ Manual checks:
 - [ ] Recovery of a stale processing row
 - [ ] Confirm service-role write to `webhook_events` works (Phase 2.2 gate)
 
+## Stage Close — run before committing
+
+- [ ] All implementation tasks above checked off
+- [ ] Manual verification checklist complete
+- [ ] `docs/decisions.md` — any new ADRs? Stripe version values still correct?
+- [ ] `CHANGELOG.md` — `[Unreleased]` updated with all Phase 2 changes
+- [ ] `CLAUDE.md` — Section 7 `<!-- sync -->` marker still pointing at correct Decision #12 values
+- [ ] `docs/implementation-plan.md` — Phase 2.1, 2.2, 2.3 tasks ticked; gates marked
+- [ ] `docs/prompt-plan.md` — this checklist ticked
+- [ ] `README.md` — Stripe env vars, webhook setup, stale-recovery query documented
+- [ ] `tests/README.md` — activated webhook/billing tests documented
+- [ ] `npm run validate` passes
+- [ ] `npm run build` passes
+
 ## Checkpoint
 
 ```bash
@@ -819,6 +879,20 @@ If a selected module adds database changes:
 npx supabase db reset
 npx supabase db push
 ```
+
+## Stage Close — run before committing
+
+- [ ] All selected modules implemented and tested
+- [ ] Core app still builds and runs with all module env vars removed
+- [ ] `docs/decisions.md` — new ADR for each selected module; schema impacts documented
+- [ ] `CHANGELOG.md` — `[Unreleased]` updated with all module additions
+- [ ] `CLAUDE.md` — optional module boundary rules still accurate
+- [ ] `docs/implementation-plan.md` — Phase 3 env/config tasks updated
+- [ ] `docs/prompt-plan.md` — this checklist ticked
+- [ ] `README.md` — module setup and removal instructions documented
+- [ ] `tests/README.md` — module test files documented
+- [ ] `npm run validate` passes
+- [ ] `npm run build` passes
 
 ---
 
@@ -915,6 +989,20 @@ Run formatting, lint, type checking, unit tests, Playwright tests, and productio
 Fix documentation that references missing commands, missing files, or outdated conventions.
 ```
 
+## Stage Close — run before committing
+
+- [ ] All test coverage targets met; no skipped assertions remain
+- [ ] Playwright suite passing
+- [ ] `docs/decisions.md` — all ADRs reflect final implementation; no placeholders
+- [ ] `CHANGELOG.md` — `[Unreleased]` covers all test and doc additions
+- [ ] `CLAUDE.md` — every `<!-- sync -->` marker verified against `decisions.md`; no stale values
+- [ ] `docs/implementation-plan.md` — Phase 3.2 documentation tasks checked off
+- [ ] `docs/prompt-plan.md` — this checklist ticked
+- [ ] `README.md` — every command verified against actual `package.json` scripts
+- [ ] `tests/README.md` — full test inventory current
+- [ ] `npm run validate` passes
+- [ ] `npm run build` passes
+
 ---
 
 # Stage 7: Security Review
@@ -959,6 +1047,18 @@ After fixes, run lint, type checking, unit tests, Playwright tests, and producti
 
 Create docs/security-review.md documenting findings, fixes applied, and remaining risks.
 ```
+
+## Stage Close — run before committing
+
+- [ ] All critical and high findings fixed; `docs/security-review.md` created
+- [ ] `docs/decisions.md` — security findings and mitigations added to Risks table
+- [ ] `CHANGELOG.md` — `[Unreleased]` covers all security fixes
+- [ ] `CLAUDE.md` — any new security rules or constraints added
+- [ ] `docs/implementation-plan.md` — Phase 3.2 security tasks checked off
+- [ ] `docs/prompt-plan.md` — this checklist ticked
+- [ ] `README.md` — security notes updated if any operational change required
+- [ ] `npm run validate` passes
+- [ ] `npm run build` passes
 
 ---
 
@@ -1021,6 +1121,20 @@ grep -R "pnpm\|yarn\|src/lib\|stripe_events" . \
   --exclude-dir=node_modules \
   --exclude-dir=.git
 ```
+
+## Stage Close — run before committing
+
+- [ ] All acceptance criteria verified via clean checkout
+- [ ] `docs/decisions.md` — final ADR list complete; Risks table reflects post-fix state
+- [ ] `CHANGELOG.md` — `[Unreleased]` promoted to a versioned release entry (e.g. `[0.2.0]`); `[Unreleased]` reset to empty
+- [ ] `CLAUDE.md` — final sync check; all `<!-- sync -->` markers verified
+- [ ] `docs/implementation-plan.md` — all phases and gates marked complete
+- [ ] `docs/prompt-plan.md` — all stage checklists ticked
+- [ ] `README.md` — final review; every command tested from clean checkout
+- [ ] `tests/README.md` — final test inventory
+- [ ] `npm run validate` passes on clean checkout
+- [ ] `npm run build` passes on clean checkout
+- [ ] `grep` scan clean (no pnpm, yarn, src/lib, stripe_events)
 
 ## Final Commit and Tag
 

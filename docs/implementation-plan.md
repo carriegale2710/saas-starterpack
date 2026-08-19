@@ -164,6 +164,23 @@ Every commit that completes a task, changes a convention, or introduces a new fi
 4. Update `CLAUDE.md` if a convention changed
 5. Update `docs/prompt-plan.md` if a stage prompt or checklist changed
 6. Update `tests/README.md` if test files were added or changed
+7. Update `docs/decisions.md` if a version number, risk, ADR rationale, or architectural choice changed
+
+---
+
+## Stage Close Checklist
+
+Run this checklist at the end of every stage before committing. Do not skip it.
+
+- [ ] All stage tasks checked off above
+- [ ] `docs/decisions.md` — any new ADRs added? Any version numbers or risks changed?
+- [ ] `CHANGELOG.md` — `[Unreleased]` section updated with all functional and structural changes from this stage
+- [ ] `CLAUDE.md` — any `<!-- sync: decisions.md -->` markers stale? Any new conventions to add?
+- [ ] `docs/prompt-plan.md` — stage checklist ticked; prompt updated if approach changed
+- [ ] `README.md` — routes, env vars, setup steps still accurate?
+- [ ] `tests/README.md` — test files or fixtures added or changed?
+- [ ] `npm run validate` passes (lint + typecheck + tests)
+- [ ] `npm run build` passes
 
 ---
 

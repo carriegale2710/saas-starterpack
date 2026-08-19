@@ -7,7 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-_Nothing yet — Phase 2 (Stripe) work begins next._
+### Changed
+- `CLAUDE.md` — removed stale `stripe@16.3.0` / `2024-06-20` version values; replaced with pointer to `docs/decisions.md` Decision #12 as single source of truth; removed duplicate risks table (now only in `decisions.md`); added `<!-- sync: decisions.md -->` comments on all sections that reference values owned elsewhere; added "Keeping This File Fresh" section with explicit rules
+- `docs/prompt-plan.md` — corrected Stage 4 "Confirmed Versions" block to `stripe@17.x` / `2025-11-20.acacia`; added `docs/decisions.md` to Living Document Policy table (was missing); added single-ownership rule to Documentation Layout section; added step 2 to Per-Stage Workflow (re-read `CLAUDE.md` + `decisions.md` before coding); added `<!-- sync -->` marker to Stage 4 versions block; added `CLAUDE.md` consistency check to Stage 6 audit list
+- `docs/prompt-plan.md` — added Stage Close checklist to Stages 4–8: doc staleness audit, `CHANGELOG.md` entry, `decisions.md` review, `CLAUDE.md` sync check, Living Document Policy sweep
+- `docs/implementation-plan.md` — added `docs/decisions.md` as step 7 in Living Document Policy (was missing); added Stage Close Checklist section
 
 ---
 
@@ -60,7 +64,7 @@ Phase 1 complete. Foundation is stable, all tests passing, CI green.
 - `tests/README.md` — test suite documentation
 - `.env.example` with all required variables
 - `CHANGELOG.md`
-- `docs/decisions.md` — 15 ADRs covering architecture, tooling, and conventions
+- `docs/decisions.md` — 16 ADRs covering architecture, tooling, and conventions
 - `docs/implementation-plan.md` — phased build plan with acceptance gates
 - `docs/schema.md` — full database schema documentation
 
@@ -80,3 +84,4 @@ Phase 1 complete. Foundation is stable, all tests passing, CI green.
 - ADR-13: Audit flag review (Stage 2)
 - ADR-14: Nav links in `lib/config.ts`
 - ADR-15: Vitest env setup file
+- ADR-16: Stripe `current_period_start/end` breaking change (SDK v18 / API basil)
