@@ -231,12 +231,12 @@ The Stripe Node SDK version and the API version string are separate but coupled.
 
 **Baseline: `next@15.5.23` — latest stable 15.x. `npm audit fix --force` must not be run as it would silently upgrade to `next@16.3.1` (breaking major).**
 
-| Flag | npm severity | Actual exploitability in this project | Action |
-|---|---|---|---|
-| `postcss` ≤8.5.22 — XSS via unescaped `</style>` (GHSA-qx2v-qp2m-jg93) | High | **Not exploitable.** Advisory states: *"Impact non-bundler use cases since bundlers protect against XSS on their own."* Next.js uses PostCSS as a build-time CSS processor — it never parses user-submitted CSS and re-embeds it in `<style>` tags at runtime. The attack requires exactly that pattern. | No action needed. Reassess if a feature ever re-stringifies user CSS into HTML. |
-| `postcss` — source map path traversal (GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp, GHSA-r28c-9q8g-f849) | High | Build-tool only. PostCSS source maps are generated during `npm run build` from your own source files, not from attacker-controlled input. No user input reaches PostCSS in this architecture. | No action needed for this use case. |
-| `sharp` <0.35.0 — libvips CVE-2026-33327/33328/35590/35591 | High | Bundled inside `next@15.x` for image optimisation. Risk applies only if serving attacker-controlled images through `next/image`. This project does not do that at Stage 2. | Reassess at Stage 7 if `next/image` is used with user-uploaded images. Otherwise low risk. |
-| `esbuild` ≤0.24.2 — dev server request interception | Moderate | **Dev-only.** Only affects `npm run dev` via Vitest's vite internals. Not present in production builds. | Fix at Stage 6: `npm install --save-dev vitest@^4.0.0 @vitest/coverage-v8@^4.0.0` |
+| Flag                                                                                                  | npm severity | Actual exploitability in this project                                                                                                                                                                                                                                                                    | Action                                                                                     |
+| ----------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `postcss` ≤8.5.22 — XSS via unescaped `</style>` (GHSA-qx2v-qp2m-jg93)                                | High         | **Not exploitable.** Advisory states: _"Impact non-bundler use cases since bundlers protect against XSS on their own."_ Next.js uses PostCSS as a build-time CSS processor — it never parses user-submitted CSS and re-embeds it in `<style>` tags at runtime. The attack requires exactly that pattern. | No action needed. Reassess if a feature ever re-stringifies user CSS into HTML.            |
+| `postcss` — source map path traversal (GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp, GHSA-r28c-9q8g-f849) | High         | Build-tool only. PostCSS source maps are generated during `npm run build` from your own source files, not from attacker-controlled input. No user input reaches PostCSS in this architecture.                                                                                                            | No action needed for this use case.                                                        |
+| `sharp` <0.35.0 — libvips CVE-2026-33327/33328/35590/35591                                            | High         | Bundled inside `next@15.x` for image optimisation. Risk applies only if serving attacker-controlled images through `next/image`. This project does not do that at Stage 2.                                                                                                                               | Reassess at Stage 7 if `next/image` is used with user-uploaded images. Otherwise low risk. |
+| `esbuild` ≤0.24.2 — dev server request interception                                                   | Moderate     | **Dev-only.** Only affects `npm run dev` via Vitest's vite internals. Not present in production builds.                                                                                                                                                                                                  | Fix at Stage 6: `npm install --save-dev vitest@^4.0.0 @vitest/coverage-v8@^4.0.0`          |
 
 **Next review point:** Stage 7 (Security Review).
 
@@ -250,11 +250,11 @@ The Stripe Node SDK version and the API version string are separate but coupled.
 
 **Alternatives Considered:**
 
-| Alternative | Pros | Cons | Verdict |
-|---|---|---|---|
-| Hardcode links in each nav component | Simple | Duplicated, drift-prone | Rejected |
-| Separate `lib/nav.ts` file | Clean separation | Extra file for small data | Rejected — `lib/config.ts` is already the central config |
-| `lib/config.ts` exports | Single source of truth, testable | Must not be dropped in rewrites | Accepted |
+| Alternative                          | Pros                             | Cons                            | Verdict                                                  |
+| ------------------------------------ | -------------------------------- | ------------------------------- | -------------------------------------------------------- |
+| Hardcode links in each nav component | Simple                           | Duplicated, drift-prone         | Rejected                                                 |
+| Separate `lib/nav.ts` file           | Clean separation                 | Extra file for small data       | Rejected — `lib/config.ts` is already the central config |
+| `lib/config.ts` exports              | Single source of truth, testable | Must not be dropped in rewrites | Accepted                                                 |
 
 **Consequences:**
 
@@ -273,12 +273,12 @@ The Stripe Node SDK version and the API version string are separate but coupled.
 
 **Alternatives Considered:**
 
-| Alternative | Pros | Cons | Verdict |
-|---|---|---|---|
-| `dotenv` in vitest config | Loads real `.env.local` | Real secrets in test env; `.env.local` not committed | Rejected |
-| Mock `lib/env.ts` module per test | Isolated | Boilerplate in every test file | Rejected |
-| Lazy-evaluate `env` (move parse inside function) | No startup crash | Changes production behaviour; env errors surface later | Rejected |
-| `tests/setup.ts` with `process.env` stubs | One file, zero test-file boilerplate, no real secrets | Stubs must be kept in sync with `lib/env.ts` schema | Accepted |
+| Alternative                                      | Pros                                                  | Cons                                                   | Verdict  |
+| ------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------ | -------- |
+| `dotenv` in vitest config                        | Loads real `.env.local`                               | Real secrets in test env; `.env.local` not committed   | Rejected |
+| Mock `lib/env.ts` module per test                | Isolated                                              | Boilerplate in every test file                         | Rejected |
+| Lazy-evaluate `env` (move parse inside function) | No startup crash                                      | Changes production behaviour; env errors surface later | Rejected |
+| `tests/setup.ts` with `process.env` stubs        | One file, zero test-file boilerplate, no real secrets | Stubs must be kept in sync with `lib/env.ts` schema    | Accepted |
 
 **Consequences:**
 
@@ -300,13 +300,14 @@ This project's `subscriptions` table stores `current_period_start` and `current_
 
 **What breaks on stripe@18+ / API 2025-03-31.basil:**
 
-| Location | Old path (v17, safe) | New path (v18+, basil) |
-|---|---|---|
+| Location                        | Old path (v17, safe)                     | New path (v18+, basil)                                 |
+| ------------------------------- | ---------------------------------------- | ------------------------------------------------------ |
 | `customer.subscription.updated` | `event.data.object.current_period_start` | `event.data.object.items.data[0].current_period_start` |
-| `customer.subscription.deleted` | `event.data.object.current_period_end` | `event.data.object.items.data[0].current_period_end` |
-| `invoice.paid` (expanded sub) | `subscription.current_period_start` | `subscription.items.data[0].current_period_start` |
+| `customer.subscription.deleted` | `event.data.object.current_period_end`   | `event.data.object.items.data[0].current_period_end`   |
+| `invoice.paid` (expanded sub)   | `subscription.current_period_start`      | `subscription.items.data[0].current_period_start`      |
 
 **Upgrade path (when ready):**
+
 1. Update `lib/vendor/stripe/webhook.ts` to read period dates from `items.data[0]`
 2. Update `lib/database.types.ts` if the column semantics change
 3. Update `tests/fixtures/webhook-events.ts` — fixtures must reflect new shape
@@ -327,20 +328,20 @@ This project's `subscriptions` table stores `current_period_start` and `current_
 **Decision:** Use Perplexity Pro with Claude Sonnet 5 model selection as the AI orchestration layer; GitHub MCP connector for all repository writes; Supabase MCP connector for database introspection.
 
 **Context (recorded 2026-08-19):**
-This project uses a two-role AI workflow: a *research/orchestration* role (Perplexity Pro) and an *implementation* role (GitHub MCP). The model selected within Perplexity Pro matters because it determines how reliably multi-step pre-read instructions are followed before writing code.
+This project uses a two-role AI workflow: a _research/orchestration_ role (Perplexity Pro) and an _implementation_ role (GitHub MCP). The model selected within Perplexity Pro matters because it determines how reliably multi-step pre-read instructions are followed before writing code.
 
-> **Practical guide:** see [`docs/guides/toolchain.md`](./guides/toolchain.md) for session startup checklist and day-to-day usage.
+> **Practical guide:** see [`docs/toolchain.md`](./toolchain.md) for session startup checklist and day-to-day usage.
 
 **Alternatives Considered:**
 
-| Alternative | Pros | Cons | Verdict |
-|---|---|---|---|
-| GPT-5 / GPT-4.1 via Perplexity | Strong instruction-following on simple tasks | 128K context window; weaker at multi-step agentic constraint-holding | Rejected for this workflow |
-| Gemini 2.5 Flash via Perplexity | Fast, large context | Less reliable for constraint-heavy multi-step workflows | Rejected |
-| Claude Sonnet 4.5 | Previously the default | Some reported instruction-laziness; superseded by 4.6 and 5 | Superseded |
-| Claude Sonnet 4.6 | 79.6% SWE-bench, 200K context, reliable | Available now; Sonnet 5 preferred when available | Fallback if Sonnet 5 unavailable |
-| **Claude Sonnet 5** | 1M context, best instruction-following, top agentic coding | — | **Accepted** |
-| Claude Code (local agent) | Full repo access, iterative | Requires local setup; higher cost per session | Deferred — reconsider at Stage 5+ |
+| Alternative                     | Pros                                                       | Cons                                                                 | Verdict                           |
+| ------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------- |
+| GPT-5 / GPT-4.1 via Perplexity  | Strong instruction-following on simple tasks               | 128K context window; weaker at multi-step agentic constraint-holding | Rejected for this workflow        |
+| Gemini 2.5 Flash via Perplexity | Fast, large context                                        | Less reliable for constraint-heavy multi-step workflows              | Rejected                          |
+| Claude Sonnet 4.5               | Previously the default                                     | Some reported instruction-laziness; superseded by 4.6 and 5          | Superseded                        |
+| Claude Sonnet 4.6               | 79.6% SWE-bench, 200K context, reliable                    | Available now; Sonnet 5 preferred when available                     | Fallback if Sonnet 5 unavailable  |
+| **Claude Sonnet 5**             | 1M context, best instruction-following, top agentic coding | —                                                                    | **Accepted**                      |
+| Claude Code (local agent)       | Full repo access, iterative                                | Requires local setup; higher cost per session                        | Deferred — reconsider at Stage 5+ |
 
 **Why Claude over GPT/Gemini for this workflow:**
 
@@ -360,17 +361,17 @@ This project uses a two-role AI workflow: a *research/orchestration* role (Perpl
 
 ## Risks & Mitigations
 
-| Risk                      | Likelihood | Impact | Mitigation                                            |
-| ------------------------- | ---------- | ------ | ----------------------------------------------------- |
-| Webhook race conditions   | Medium     | High   | Atomic claim pattern, transaction boundary            |
-| Stale processing rows     | Low        | Medium | updated_at timeout recovery query                     |
-| RLS misconfiguration      | Low        | High   | Test policies, deny-by-default, no ambiguous policies |
-| Stripe API version drift  | Medium     | Medium | Pin SDK + API version (Decision #12), upgrade checklist (Decision #16) |
-| Stripe basil upgrade      | Low        | High   | Decision #16 upgrade path; TS types will surface error naturally |
-| Vendor lock-in (Supabase) | High       | Medium | Standard SQL, exportable data                         |
-| Vercel cold starts        | Medium     | Low    | Pro tier, optimize bundle size                        |
-| Nav config dropped in rewrite | Low    | High   | Covered by `tests/config.test.ts` + `tests/nav.test.ts` |
-| AI model regression       | Low        | Medium | Decision #17 fallback: Sonnet 4.6; reassess at Stage 5 |
+| Risk                          | Likelihood | Impact | Mitigation                                                             |
+| ----------------------------- | ---------- | ------ | ---------------------------------------------------------------------- |
+| Webhook race conditions       | Medium     | High   | Atomic claim pattern, transaction boundary                             |
+| Stale processing rows         | Low        | Medium | updated_at timeout recovery query                                      |
+| RLS misconfiguration          | Low        | High   | Test policies, deny-by-default, no ambiguous policies                  |
+| Stripe API version drift      | Medium     | Medium | Pin SDK + API version (Decision #12), upgrade checklist (Decision #16) |
+| Stripe basil upgrade          | Low        | High   | Decision #16 upgrade path; TS types will surface error naturally       |
+| Vendor lock-in (Supabase)     | High       | Medium | Standard SQL, exportable data                                          |
+| Vercel cold starts            | Medium     | Low    | Pro tier, optimize bundle size                                         |
+| Nav config dropped in rewrite | Low        | High   | Covered by `tests/config.test.ts` + `tests/nav.test.ts`                |
+| AI model regression           | Low        | Medium | Decision #17 fallback: Sonnet 4.6; reassess at Stage 5                 |
 
 ---
 
