@@ -32,57 +32,66 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 ```text
 /
 ├── app/
-│ ├── (marketing)/ # Public pages (/, /pricing, /about)
-│ ├── (auth)/ # Auth pages (/login, /signup, /forgot-password)
-│ ├── (dashboard)/ # Protected pages (/dashboard, /profile, /billing)
-│ ├── api/
-│ │ ├── stripe/
-│ │ │ ├── checkout/route.ts
-│ │ │ ├── portal/route.ts
-│ │ │ └── webhook/route.ts
-│ │ └── auth/
-│ │ └── callback/route.ts
-│ ├── layout.tsx
-│ └── globals.css
+│   ├── (marketing)/          # Public pages (/, /pricing, /about)
+│   ├── (auth)/               # Auth pages (/login, /signup, /forgot-password)
+│   ├── (dashboard)/          # Protected pages (/dashboard, /profile, /billing)
+│   ├── api/
+│   │   ├── stripe/
+│   │   │   ├── checkout/route.ts
+│   │   │   ├── portal/route.ts
+│   │   │   └── webhook/route.ts
+│   │   └── auth/
+│   │       └── callback/route.ts
+│   ├── layout.tsx
+│   └── globals.css
 ├── components/
-│ ├── ui/ # shadcn/ui-style components
-│ ├── marketing/ # Public page components
-│ ├── dashboard/ # Protected page components
-│ └── shared/ # Shared components (nav, footer)
-├── lib/ # Canonical path — do NOT use src/lib/
-│ ├── vendor/
-│ │ ├── supabase/
-│ │ │ ├── client.ts
-│ │ │ ├── server.ts
-│ │ │ └── rls.ts
-│ │ └── stripe/
-│ │ ├── client.ts
-│ │ ├── checkout.ts
-│ │ ├── portal.ts
-│ │ └── webhook.ts
-│ ├── modules/ # Optional modules (opt-in)
-│ ├── config.ts # Central product configuration (includes billing policy)
-│ ├── database.types.ts # Generated from Supabase schema — regenerate after migrations
-│ ├── env.ts # Environment validation (Zod)
-│ └── entitlements.ts # Subscription entitlement logic
+│   ├── ui/                   # shadcn/ui-style components
+│   ├── marketing/            # Public page components
+│   ├── dashboard/            # Protected page components
+│   └── shared/               # Shared components (nav, footer)
+├── lib/                      # Canonical path — do NOT use src/lib/
+│   ├── vendor/
+│   │   ├── supabase/
+│   │   │   ├── client.ts
+│   │   │   ├── server.ts
+│   │   │   └── rls.ts
+│   │   └── stripe/
+│   │       ├── client.ts
+│   │       ├── checkout.ts
+│   │       ├── portal.ts
+│   │       └── webhook.ts
+│   ├── modules/              # Optional modules (opt-in)
+│   ├── config.ts             # Central product configuration (includes billing policy)
+│   ├── database.types.ts     # Generated from Supabase schema — regenerate after migrations
+│   ├── env.ts                # Environment validation (Zod)
+│   └── entitlements.ts       # Subscription entitlement logic
 ├── supabase/
-│ └── migrations/
-│ └── 0001_initial.sql
+│   └── migrations/
+│       └── 0001_initial.sql
 ├── tests/
-│ ├── setup.ts # Stubs env vars — must stay in sync with lib/env.ts
-│ ├── config.test.ts
-│ ├── entitlements.test.ts
-│ ├── env.test.ts
-│ ├── nav.test.ts
-│ ├── rls.test.ts
-│ └── README.md
+│   ├── fixtures/
+│   │   ├── subscriptions.ts  # Typed MockSubscription for all 8 statuses
+│   │   └── webhook-events.ts # Stripe event payloads for all 5 entitlement events + ignored
+│   ├── setup.ts              # Stubs env vars — must stay in sync with lib/env.ts
+│   ├── config.test.ts
+│   ├── entitlements.test.ts
+│   ├── env.test.ts
+│   ├── nav.test.ts
+│   ├── rls.test.ts
+│   ├── webhook.test.ts       # Skeleton — activates in Phase 2
+│   ├── billing.test.ts       # Skeleton — activates in Phase 2
+│   └── README.md
 ├── docs/
-│ ├── implementation-plan.md
-│ ├── schema.md
-│ └── decisions.md
+│   ├── archive/              # Superseded drafts
+│   ├── guides/               # How-to guides
+│   ├── microsaas-playbook/   # Playbook content
+│   ├── implementation-plan.md
+│   ├── schema.md
+│   ├── decisions.md
+│   └── prompt-plan.md
 ├── .github/
-│ └── workflows/
-│ └── ci.yml # Lint + typecheck + tests on push/PR to main
+│   └── workflows/
+│       └── ci.yml            # 3 parallel jobs: validate → build + test
 ├── .env.example
 ├── CHANGELOG.md
 ├── README.md
@@ -311,15 +320,22 @@ Never leave `lib/database.types.ts` empty or with placeholder types — CI will 
 
 **Setup file:** `tests/setup.ts` stubs all env vars required by `lib/env.ts` so imports don't crash. Configured via `vitest.config.ts` `setupFiles`.
 
-**Current test suite (all passing ✅):**
+**Current test suite:**
 
-| File | Covers |
-|---|---|
-| `tests/config.test.ts` | `APP_CONFIG` and `BILLING_CONFIG` shape |
-| `tests/entitlements.test.ts` | Access logic for all subscription statuses |
-| `tests/env.test.ts` | Zod env schema — accepts valid, rejects invalid |
-| `tests/nav.test.ts` | Nav shape, label uniqueness, group isolation |
-| `tests/rls.test.ts` | RLS policy documentation tests |
+| File | Status | Covers |
+|---|---|---|
+| `tests/config.test.ts` | ✅ Active | `APP_CONFIG` and `BILLING_CONFIG` shape |
+| `tests/entitlements.test.ts` | ✅ Active | Access logic for all subscription statuses |
+| `tests/env.test.ts` | ✅ Active | Zod env schema — accepts valid, rejects invalid |
+| `tests/nav.test.ts` | ✅ Active | Nav shape, label uniqueness, group isolation |
+| `tests/rls.test.ts` | ✅ Active | RLS policy documentation tests |
+| `tests/webhook.test.ts` | 🔜 Skeleton | Idempotency, event routing, stale-processing — activates Phase 2 |
+| `tests/billing.test.ts` | 🔜 Skeleton | Checkout contract, status coverage, `BILLING_CONFIG` policy — activates Phase 2 |
+
+**Fixtures (in `tests/fixtures/`):**
+
+- `subscriptions.ts` — typed `MockSubscription` for all 8 statuses; keyed as `Record<SubscriptionStatus, MockSubscription>`
+- `webhook-events.ts` — Stripe event payloads for all 5 entitlement-controlling events + `ignoredEventFixtures`
 
 **Coverage Targets:**
 
@@ -328,15 +344,13 @@ Never leave `lib/database.types.ts` empty or with placeholder types — CI will 
 - Entitlement logic: 100%
 - RLS policies: 80%
 
-**Phase 2 planned tests:** `webhook.test.ts`, `billing.test.ts`, `tests/fixtures/`.
-
 ### 11. CI
 
-GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push and PR to `main`:
+GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push and PR to `main` — **3 parallel jobs:**
 
-1. `npm run lint`
-2. `npm run typecheck` (`tsc --noEmit`)
-3. `npm test`
+1. `validate` — lint + typecheck (~30s), runs first
+2. `build` — Next.js production build, runs after validate
+3. `test` — Vitest + coverage, runs after validate (parallel with build)
 
 All three must pass before merging. Do not bypass CI.
 
@@ -363,6 +377,8 @@ This file owns **rules**, never **values**. Specific version numbers, risk table
 
 - When a convention changes → update this file **and** `docs/decisions.md`
 - When a version changes → update `docs/decisions.md` Decision #12 only; this file points there
+- When a file is added or moved → update the directory tree in Section 1
+- When a test file is added or its status changes → update the test table in Section 10
 - When starting a new stage → re-read this file and verify it matches `docs/decisions.md`
 - Sections marked `<!-- sync: decisions.md -->` mirror a value owned elsewhere — check them first when upgrading dependencies
 
