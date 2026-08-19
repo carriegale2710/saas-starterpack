@@ -1,5 +1,7 @@
 # The Leanest MVP Tech Stack for Solo Micro-SaaS Founders
 
+> Note: This doc is a rough guide for solo founders wanting to build their own micro-saas products. The notes for both me and future users who might clone this repo to build their own projects. These are NOT actual decision notes for this project. Refer to `decisions.md` instead for this repo's actual chosen tech stack.
+
 ![A detailed annotated diagram of a multilayered sandwich is drawn on whiteboard. Each annotation explains a technology choice, eg. supabase for BaaS, and points to a layer in the sandwich that represents part of the lean 'godstack' eg. backend, frontend, devops, core engine etc.](godstack.png)
 
 ## Key Considerations
