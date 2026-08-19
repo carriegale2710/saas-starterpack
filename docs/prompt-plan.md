@@ -52,19 +52,6 @@ Perplexity Pro must update the following files as part of completing each stage 
 
 The architecture stage produces a split documentation set:
 
-- `docs/implementation-plan.md` — concise execution checklist (living); phases, gates, task lists only
-- `docs/schema.md` — authoritative database contract
-- `docs/decisions.md` — approved architectural choices (ADRs), risks, non-goals, pinned version values
-- `docs/prompt-plan.md` — this file (living)
-- `README.md` — setup, operations, migration, deployment, and rationale
-- `CLAUDE.md` — implementation conventions and non-negotiable security rules; points to `decisions.md` for version values
-- `CHANGELOG.md` — versioned change log
-- `tests/README.md` — test suite documentation
-
-**Single-ownership rule:** version numbers and risks live in `docs/decisions.md` only. `CLAUDE.md` and `implementation-plan.md` reference them; they do not duplicate them.
-
-**Directory tree rule:** the `CLAUDE.md` Section 1 directory tree is the single source of truth for repo structure. Update it in the same commit that adds, moves, or deletes any file or folder.
-
 ---
 
 ## Stage Close Checklist

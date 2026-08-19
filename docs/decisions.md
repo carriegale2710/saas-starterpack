@@ -241,20 +241,7 @@ See [`docs/toolchain.md`](./toolchain.md) for the session startup checklist.
 
 **Why:** Key content (entitlement events, stale-processing SQL, RLS explanation, module contract) had drifted out of sync across 3–4 files; a DRY audit found 6 high-priority and 4 medium-priority duplications. Wrong docs hurt agent output more than missing docs.
 
-| File                   | Owns                                                   | Doesn't own                            |
-| ---------------------- | ------------------------------------------------------ | -------------------------------------- |
-| `AGENTS.md`            | Stack, commands, directory map, constraint summary     | Rules, rationale, schema detail        |
-| `CLAUDE.md`            | Implementation rules, security, naming, test strategy  | Version numbers, rationale, schema SQL |
-| `docs/architecture.md` | System diagram, request flows                          | Status tables, SQL, rationale          |
-| `docs/schema.md`       | Full SQL, RLS policies, entitlement table, webhook SQL | Rules, rationale                       |
-| `docs/decisions.md`    | Rationale, alternatives, consequences                  | Rules, SQL, diagrams                   |
-| `docs/guides/*`        | Task how-tos                                           | Architectural rules                    |
-
-- Move content once, link from elsewhere — never copy
-- `docs/guides/ai-agent-tips.md` covers the practical application of this for agents
-- `AGENTS.md`'s constraints section is a summary with links, not a copy
-- Re-run the DRY audit after major structural changes ("audit documentation for DRYness")
-- Fix factual doc bugs immediately when found
+> Documentation rules outlined in `CLAUDE.md`
 
 ---
 

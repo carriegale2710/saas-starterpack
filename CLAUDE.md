@@ -119,17 +119,17 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 
 ```typescript
 // ✅ CORRECT: Server-side only (api/routes)
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY, // Server-only
+  process.env.SUPABASE_SERVICE_ROLE_KEY // Server-only
 );
 
 // ✅ CORRECT: Client-side (components, pages)
-import { createBrowserClient } from "@supabase/ssr";
+import { createBrowserClient } from '@supabase/ssr';
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 ```
 
@@ -162,7 +162,7 @@ The subscription upsert and `status = 'processed'` update **must execute in the 
 
 ```typescript
 // lib/vendor/supabase/server.ts — inside webhook handler
-await supabase.rpc("process_webhook_event", { event_id, subscription_data });
+await supabase.rpc('process_webhook_event', { event_id, subscription_data });
 // The RPC wraps both writes in a single transaction.
 ```
 
@@ -259,8 +259,8 @@ Pin **both** the Node SDK version in `package.json` and the API version string i
 
 ```typescript
 // lib/vendor/stripe/client.ts
-import Stripe from "stripe";
-import { env } from "@/lib/env";
+import Stripe from 'stripe';
+import { env } from '@/lib/env';
 
 export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: env.STRIPE_API_VERSION as Stripe.LatestApiVersion,
@@ -296,15 +296,15 @@ Never leave `lib/database.types.ts` empty or with placeholder types — CI will 
 
 **Current test suite:**
 
-| File | Status | Covers |
-|---|---|---|
-| `tests/config.test.ts` | ✅ Active | `APP_CONFIG` and `BILLING_CONFIG` shape |
-| `tests/entitlements.test.ts` | ✅ Active | Access logic for all subscription statuses |
-| `tests/env.test.ts` | ✅ Active | Zod env schema — accepts valid, rejects invalid |
-| `tests/nav.test.ts` | ✅ Active | Nav shape, label uniqueness, group isolation |
-| `tests/rls.test.ts` | ✅ Active | RLS policy documentation tests |
-| `tests/webhook.test.ts` | 🔜 Skeleton | Idempotency, event routing, stale-processing — activates Phase 2 |
-| `tests/billing.test.ts` | 🔜 Skeleton | Checkout contract, status coverage, `BILLING_CONFIG` policy — activates Phase 2 |
+| File                         | Status      | Covers                                                                          |
+| ---------------------------- | ----------- | ------------------------------------------------------------------------------- |
+| `tests/config.test.ts`       | ✅ Active   | `APP_CONFIG` and `BILLING_CONFIG` shape                                         |
+| `tests/entitlements.test.ts` | ✅ Active   | Access logic for all subscription statuses                                      |
+| `tests/env.test.ts`          | ✅ Active   | Zod env schema — accepts valid, rejects invalid                                 |
+| `tests/nav.test.ts`          | ✅ Active   | Nav shape, label uniqueness, group isolation                                    |
+| `tests/rls.test.ts`          | ✅ Active   | RLS policy documentation tests                                                  |
+| `tests/webhook.test.ts`      | 🔜 Skeleton | Idempotency, event routing, stale-processing — activates Phase 2                |
+| `tests/billing.test.ts`      | 🔜 Skeleton | Checkout contract, status coverage, `BILLING_CONFIG` policy — activates Phase 2 |
 
 **Fixtures:** `tests/fixtures/subscriptions.ts` — all 8 statuses; `tests/fixtures/webhook-events.ts` — all 5 entitlement events + ignored.
 
@@ -325,6 +325,33 @@ All three must pass before merging.
 **Platform:** Vercel (free tier). Region: `syd1`. See `vercel.json` for build config.
 
 ---
+
+## Documentation Hygiene
+
+## Scope and Separation of Concerns
+
+| File                          | Answers                                                    | Does NOT answer                                             |
+| ----------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
+| `AGENTS.md`                   | Where does X live, and how do I run it?                    | Why is it built this way?                                   |
+| `CLAUDE.md`                   | What are the implementation rules?                         | What version are we pinned to? _(→ `docs/decisions.md`)_    |
+| `docs/architecture.md`        | How does a request flow through the system?                | Why was it built this way?                                  |
+| `docs/schema.md`              | What's the full SQL contract?                              | Why is it shaped this way?                                  |
+| `docs/decisions.md`           | Why was this choice made?                                  | What's the rule for using it?                               |
+| `docs/implementation-plan.md` | What needs to be implemented, and what phase are we at?    | What's the exact agent prompt for this step?                |
+| `docs/prompt-plan.md`         | What's the exact prompt/step text for this agent workflow? | What's the overall task list or phase status?               |
+| `docs/guides/*`               | How do I do this specific task?                            | What's the architectural rule behind it?                    |
+| `README.md`                   | How do I set up, run, migrate, and deploy this — and why?  | What's the implementation rule?                             |
+| `CHANGELOG.md`                | What changed, and in which version?                        | Why did it change? _(→ `docs/decisions.md`)_                |
+| `tests/README.md`             | How is the test suite organized and run?                   | What implementation rule is being tested? _(→ `CLAUDE.md`)_ |
+
+### Rules for writing documentation
+
+- Move content once, link from elsewhere — never copy.
+- Version numbers and risks live in `docs/decisions.md` only; `CLAUDE.md` and `docs/implementation-plan.md` reference them, never duplicate them.
+- `AGENTS.md`'s constraints section is a summary with links, not a copy.
+- The directory tree in `CLAUDE.md` Section 1 is the single source of truth for repo structure; update it in the same commit that adds, moves, or deletes any file or folder.
+- Re-run the DRY audit after major structural changes (trigger phrase: "audit documentation for DRYness").
+- Fix factual doc bugs immediately when found.
 
 ## Keeping This File Fresh
 
