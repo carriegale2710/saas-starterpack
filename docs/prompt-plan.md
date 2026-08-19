@@ -2,7 +2,7 @@
 
 > **Living document** — update stage checklists, prompts, and notes whenever a stage completes or a convention changes.
 
-Use an **eight-stage workflow**. Each stage has a defined tool assignment:
+Use an **eight-stage workflow**. Each stage has a defined tool assignment (see `toolchain.md`):
 
 - **Perplexity Pro** — research, architecture, decisions, vendor guidance, independent review, doc maintenance, and direct implementation via GitHub MCP connector between stages
 - **GitHub MCP connector** — direct file commits, code implementation, and repository management (replaces Claude Free for code generation)
@@ -35,16 +35,16 @@ These conventions apply throughout every stage:
 
 Perplexity Pro must update the following files as part of completing each stage — not as a separate cleanup pass:
 
-| File | Update when |
-|---|---|
-| `docs/implementation-plan.md` | Task completed, gate passed, or decision changed |
-| `docs/prompt-plan.md` | Stage completed, checklist ticked, or prompt refined |
-| `CHANGELOG.md` | Any commit with functional or structural changes |
-| `README.md` | Routes, env vars, setup steps, or stack changed |
-| `CLAUDE.md` | Convention added, renamed, or removed |
-| `CLAUDE.md` Section 1 directory tree | Any file or folder added, moved, or deleted |
-| `docs/decisions.md` | Any version number, risk, ADR rationale, or architectural choice changed |
-| `tests/README.md` | Test files added, changed, or skeleton activated |
+| File                                 | Update when                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| `docs/implementation-plan.md`        | Task completed, gate passed, or decision changed                         |
+| `docs/prompt-plan.md`                | Stage completed, checklist ticked, or prompt refined                     |
+| `CHANGELOG.md`                       | Any commit with functional or structural changes                         |
+| `README.md`                          | Routes, env vars, setup steps, or stack changed                          |
+| `CLAUDE.md`                          | Convention added, renamed, or removed                                    |
+| `CLAUDE.md` Section 1 directory tree | Any file or folder added, moved, or deleted                              |
+| `docs/decisions.md`                  | Any version number, risk, ADR rationale, or architectural choice changed |
+| `tests/README.md`                    | Test files added, changed, or skeleton activated                         |
 
 ---
 
@@ -86,16 +86,16 @@ Run this at the end of **every stage** before the git commit. This is not option
 
 ## Tool Assignment by Stage
 
-| Stage | Perplexity Pro | GitHub MCP | Local tools |
+| Stage                 | Perplexity Pro                          | GitHub MCP                          | Local tools                                     |
 | --------------------- | --------------------------------------- | ----------------------------------- | ----------------------------------------------- |
-| Architecture plan | Draft architecture and research vendors | — | Review docs in VS Code |
-| Foundation | Verify current Next.js and npm guidance | Scaffold app, config, shell, layout | `npm run dev`, lint, build |
-| Supabase auth/RLS | Check SSR approach and current SDK docs | Implement auth, migrations, RLS | `npx supabase db reset`, type generation, tests |
-| Stripe billing | Verify webhook events and SDK version | Implement billing, webhooks, gates | `stripe listen`, Vitest |
-| Optional integrations | Research module setup if needed | Implement selected modules only | Environment toggle tests, build |
-| Testing/docs | Review documentation accuracy | Add missing tests, fix docs | Vitest, Playwright, build |
-| Security review | Independent security audit | Fix confirmed critical/high issues | Full test suite, `git diff` |
-| Final validation | Independent release-readiness review | Final validation fixes | Clean checkout, all checks |
+| Architecture plan     | Draft architecture and research vendors | —                                   | Review docs in VS Code                          |
+| Foundation            | Verify current Next.js and npm guidance | Scaffold app, config, shell, layout | `npm run dev`, lint, build                      |
+| Supabase auth/RLS     | Check SSR approach and current SDK docs | Implement auth, migrations, RLS     | `npx supabase db reset`, type generation, tests |
+| Stripe billing        | Verify webhook events and SDK version   | Implement billing, webhooks, gates  | `stripe listen`, Vitest                         |
+| Optional integrations | Research module setup if needed         | Implement selected modules only     | Environment toggle tests, build                 |
+| Testing/docs          | Review documentation accuracy           | Add missing tests, fix docs         | Vitest, Playwright, build                       |
+| Security review       | Independent security audit              | Fix confirmed critical/high issues  | Full test suite, `git diff`                     |
+| Final validation      | Independent release-readiness review    | Final validation fixes              | Clean checkout, all checks                      |
 
 ---
 
