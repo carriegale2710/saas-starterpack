@@ -322,6 +322,42 @@ This project's `subscriptions` table stores `current_period_start` and `current_
 
 ---
 
+## 17. AI Toolchain: Perplexity Pro + Claude Sonnet 5 + GitHub MCP
+
+**Decision:** Use Perplexity Pro with Claude Sonnet 5 model selection as the AI orchestration layer; GitHub MCP connector for all repository writes; Supabase MCP connector for database introspection.
+
+**Context (recorded 2026-08-19):**
+This project uses a two-role AI workflow: a *research/orchestration* role (Perplexity Pro) and an *implementation* role (GitHub MCP). The model selected within Perplexity Pro matters because it determines how reliably multi-step pre-read instructions are followed before writing code.
+
+> **Practical guide:** see [`docs/guides/toolchain.md`](./guides/toolchain.md) for session startup checklist and day-to-day usage.
+
+**Alternatives Considered:**
+
+| Alternative | Pros | Cons | Verdict |
+|---|---|---|---|
+| GPT-5 / GPT-4.1 via Perplexity | Strong instruction-following on simple tasks | 128K context window; weaker at multi-step agentic constraint-holding | Rejected for this workflow |
+| Gemini 2.5 Flash via Perplexity | Fast, large context | Less reliable for constraint-heavy multi-step workflows | Rejected |
+| Claude Sonnet 4.5 | Previously the default | Some reported instruction-laziness; superseded by 4.6 and 5 | Superseded |
+| Claude Sonnet 4.6 | 79.6% SWE-bench, 200K context, reliable | Available now; Sonnet 5 preferred when available | Fallback if Sonnet 5 unavailable |
+| **Claude Sonnet 5** | 1M context, best instruction-following, top agentic coding | — | **Accepted** |
+| Claude Code (local agent) | Full repo access, iterative | Requires local setup; higher cost per session | Deferred — reconsider at Stage 5+ |
+
+**Why Claude over GPT/Gemini for this workflow:**
+
+- This workflow requires the model to read `CLAUDE.md` → `docs/decisions.md` → act, without dropping constraints across a multi-file session. Claude Sonnet 4.6+ is specifically trained for this kind of sequential instruction-following in agentic contexts.
+- The living-doc set (`CLAUDE.md` + `implementation-plan.md` + `decisions.md` + `prompt-plan.md`) exceeds 50K tokens combined. Sonnet 5's 1M context window handles the full set without truncation.
+- `CLAUDE.md` has no special meaning to the model — it is just a markdown file read via an explicit GitHub MCP `get_file_contents` call, as directed by `docs/prompt-plan.md` Per-Stage Workflow step 2.
+
+**Consequences:**
+
+- In Perplexity Pro, always select **Claude Sonnet 5** (fallback: Sonnet 4.6)
+- GitHub MCP connector handles all repo writes — Perplexity Pro does not commit code directly
+- Supabase MCP connector used for schema verification and RLS introspection between stages
+- If Sonnet 5 is unavailable, Sonnet 4.6 is an acceptable substitute with no workflow changes required
+- Reassess model selection at Stage 5 if Claude Code becomes cost-effective for the session volume
+
+---
+
 ## Risks & Mitigations
 
 | Risk                      | Likelihood | Impact | Mitigation                                            |
@@ -334,6 +370,7 @@ This project's `subscriptions` table stores `current_period_start` and `current_
 | Vendor lock-in (Supabase) | High       | Medium | Standard SQL, exportable data                         |
 | Vercel cold starts        | Medium     | Low    | Pro tier, optimize bundle size                        |
 | Nav config dropped in rewrite | Low    | High   | Covered by `tests/config.test.ts` + `tests/nav.test.ts` |
+| AI model regression       | Low        | Medium | Decision #17 fallback: Sonnet 4.6; reassess at Stage 5 |
 
 ---
 
