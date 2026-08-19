@@ -1,6 +1,8 @@
 # Implementation Plan
 
 > **Living document** — update this file whenever a task is completed or a decision changes. Keep checkboxes, status notes, and acceptance gates current.
+>
+> **Risks, non-goals, and architectural rationale** are documented in [`docs/decisions.md`](./decisions.md) — do not duplicate them here.
 
 ## Build Order & Acceptance Gates
 
@@ -80,7 +82,7 @@
 
 #### 2.1 Stripe Integration
 
-- [ ] Install `stripe` SDK — **pin exact version** in `package.json` (e.g. `"stripe": "16.3.0"`). See `docs/decisions.md` ADR-12.
+- [ ] Install `stripe` SDK — **pin `"stripe": "17.x"`** in `package.json`. See [`docs/decisions.md` Decision #12](./decisions.md) for version rationale and Decision #16 for the upgrade path.
 - [ ] Add `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO`, `STRIPE_API_VERSION` to `.env.example`
 - [ ] Add Stripe vars to `lib/env.ts` Zod schema
 - [ ] Add Stripe var stubs to `tests/setup.ts` and `.github/workflows/ci.yml env:`
@@ -165,35 +167,6 @@ Every commit that completes a task, changes a convention, or introduces a new fi
 
 ---
 
-## Risk Mitigation
-
-| Risk | Mitigation |
-| ------------------------ | ----------------------------------------------------------------------------- |
-| Webhook race conditions | Atomic claim pattern with DB row locking |
-| Stale processing rows | `updated_at` timeout recovery query (documented in README) |
-| Subscription state drift | Webhooks as source of truth; periodic reconciliation job (optional) |
-| RLS misconfiguration | Test with multiple users; deny-by-default; no ambiguous service-role policies |
-| Stripe API version drift | Pin SDK version + API version string together; test on upgrade |
-| Vendor lock-in | Isolate Supabase/Stripe code in `lib/vendor/` |
-| Node.js deprecation | Target Node 22 LTS; Node 20 deprecated on Vercel October 2026 |
-| Build passing but broken | `npm run build` runs in CI, not just typecheck |
-
----
-
-## Non-Goals (Explicitly Out of Scope)
-
-- Multi-tenant workspaces or teams
-- Usage-based billing (metered events)
-- File uploads (Supabase Storage)
-- Email sending (Resend)
-- Analytics (PostHog) or error tracking (Sentry)
-- AI/LLM integrations
-- Background job queues
-- Microservices or separate backend
-- GraphQL, Redux, Prisma, Drizzle, Docker
-
----
-
 ## Optional Module Boundaries
 
 ```text
@@ -206,4 +179,4 @@ lib/modules/
 └── ai/             # LLM API clients
 ```
 
-Each module exports a single `init()` function and has its own migrations.
+Each module exports a single `init()` function and has its own migrations. Full module boundary rules in [`docs/decisions.md` Decision #10](./decisions.md).
