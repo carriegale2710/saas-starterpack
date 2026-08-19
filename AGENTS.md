@@ -66,8 +66,9 @@ docs/                   # all project documentation
 | DB schema (tables, columns, RLS) | `docs/schema.md` |
 | Pinned tool/dependency versions | `docs/toolchain.md` |
 | Step-by-step coding prompts | `docs/prompt-plan.md` |
-| Local dev setup from scratch | `docs/guides/local-setup.md` |
+| Local dev setup from scratch | `README.md` Quick Start section |
 | How to scaffold an optional module | `docs/guides/adding-a-module.md` |
+| Doc + file structure tips for AI agents | `docs/guides/ai-agent-tips.md` |
 
 ---
 
