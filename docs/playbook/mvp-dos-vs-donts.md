@@ -1,5 +1,7 @@
 # Technical Dos vs Don'ts for Your First MVP
 
+![a diagram of 6 ways to grow a micro-saas product](growth-blueprint.png)
+
 ## **DO**
 
 - **Prioritize Speed and "Vibe Coding":** The primary goal is to ship a functional product in days or weeks, not months. Use **AI-native tools** like **Cursor** and **Windsurf** for code generation, and platforms like **Lovable** or **Bolt** to spin up an initial functional version from simple prompts.
