@@ -57,8 +57,6 @@ CREATE POLICY "Users can insert own profile"
   WITH CHECK (auth.uid() = id);
 ```
 
-> The service-role key bypasses RLS on all tables. No policy is needed to grant service-role access — the bypass is unconditional at the Supabase level.
-
 ---
 
 ### `subscriptions`
@@ -96,6 +94,7 @@ CREATE INDEX idx_subscriptions_stripe_customer_id ON subscriptions(stripe_custom
 CREATE INDEX idx_subscriptions_stripe_subscription_id ON subscriptions(stripe_subscription_id);
 CREATE INDEX idx_subscriptions_status ON subscriptions(status);
 CREATE INDEX idx_subscriptions_period_end ON subscriptions(current_period_end);
+-- Hot path: SELECT status, plan_id, current_period_end FROM subscriptions WHERE user_id = auth.uid()
 
 CREATE TRIGGER update_subscriptions_updated_at
   BEFORE UPDATE ON subscriptions
@@ -114,8 +113,7 @@ CREATE POLICY "Users can read own subscriptions"
   USING (auth.uid() = user_id);
 
 -- No authenticated-user write policies.
--- All writes come from the webhook handler using the service-role key,
--- which bypasses RLS unconditionally.
+-- All writes come from the webhook handler using the service-role key.
 ```
 
 ---
@@ -162,9 +160,7 @@ CREATE TRIGGER update_webhook_events_updated_at
 ```sql
 ALTER TABLE webhook_events ENABLE ROW LEVEL SECURITY;
 
--- No authenticated-user policies on this table.
--- Access is exclusively through the service-role key (webhook handler),
--- which bypasses RLS unconditionally.
+-- No authenticated-user policies. Access is exclusively via the service-role key.
 -- Adding an auth.uid() IS NULL policy would be incorrect and misleading.
 ```
 
@@ -172,35 +168,32 @@ ALTER TABLE webhook_events ENABLE ROW LEVEL SECURITY;
 
 ## Atomic Webhook Processing
 
-The webhook handler uses a two-step approach: insert-on-arrival (idempotent), then claim-and-process.
+The webhook handler uses a three-step approach: insert-on-arrival (idempotent), claim, then process in a transaction.
 
 ```sql
--- Step 1: Insert on arrival (INSERT ... ON CONFLICT DO NOTHING)
--- This is the idempotency gate — duplicate deliveries from Stripe are silently ignored.
+-- Step 1: Insert on arrival (idempotency gate)
 INSERT INTO webhook_events (stripe_event_id, event_type, status, payload)
 VALUES ($1, $2, 'pending', $3)
 ON CONFLICT (stripe_event_id) DO NOTHING;
--- If 0 rows inserted: duplicate event — return 200 immediately, do nothing.
+-- If 0 rows inserted: duplicate — return 200 immediately.
 
--- Step 2: Claim (atomic update, outside transaction)
+-- Step 2: Claim (atomic, outside transaction)
 UPDATE webhook_events
 SET status = 'processing', attempts = attempts + 1
 WHERE stripe_event_id = $1 AND status = 'pending'
 RETURNING id;
--- If no row returned: already claimed by another worker — return 200 immediately.
+-- If no row returned: already claimed — return 200 immediately.
 
 -- Step 3: Process (inside transaction)
 BEGIN;
-  -- Upsert subscription state
   INSERT INTO subscriptions (...) VALUES (...)
   ON CONFLICT (stripe_subscription_id) DO UPDATE SET ...;
 
-  -- Mark event done
   UPDATE webhook_events
   SET status = 'processed', processed_at = NOW()
   WHERE id = $event_row_id;
 COMMIT;
--- On any error: ROLLBACK — event stays 'processing' and is recovered by stale-reset.
+-- On error: ROLLBACK — event stays 'processing' and is recovered by stale-reset.
 ```
 
 **Stale-processing recovery** (run on a schedule or manually):
@@ -216,17 +209,44 @@ WHERE status = 'processing'
 
 ## Entitlement-Controlling Events
 
-These are the Stripe event types that trigger a subscription upsert and directly control access:
+Only these Stripe event types trigger a subscription upsert:
 
-| Event                           | What it signals                               |
-| ------------------------------- | --------------------------------------------- |
-| `checkout.session.completed`    | Initial subscription created                  |
-| `customer.subscription.updated` | Plan change, renewal, status change           |
-| `customer.subscription.deleted` | Cancellation                                  |
-| `invoice.paid`                  | Successful payment — confirms `active` status |
-| `invoice.payment_failed`        | Failed payment — triggers `past_due`          |
+| Event | What it signals |
+|---|---|
+| `checkout.session.completed` | Initial subscription created |
+| `customer.subscription.updated` | Plan change, renewal, status change |
+| `customer.subscription.deleted` | Cancellation |
+| `invoice.paid` | Successful payment — confirms `active` status |
+| `invoice.payment_failed` | Failed payment — triggers `past_due` |
 
-All other event types are logged to `webhook_events` and acknowledged (200) without a subscription upsert. Unknown types must never crash the handler.
+All other event types are logged and acknowledged (200) without a subscription upsert. Unknown types must never crash the handler.
+
+---
+
+## Entitlement Logic
+
+Access policy is defined in `lib/config.ts` (`BILLING_CONFIG`). The **template default** is conservative:
+
+| Status | Default Access |
+|---|---|
+| `active`, `trialing` | Full access |
+| `past_due` | **No access** — override via `BILLING_CONFIG.pastDueGracePeriod = true` |
+| `canceled`, `unpaid`, `incomplete`, `incomplete_expired` | No access |
+| No subscription record | No access |
+
+Any status not matched by `lib/entitlements.ts` denies access by default.
+
+---
+
+## RLS Expectations
+
+The service-role key bypasses RLS unconditionally — this is a Supabase platform behaviour, not a policy.
+
+| Table | Authenticated User Access | Service-Role Access |
+|---|---|---|
+| `profiles` | Read/write own row only | Full access (RLS bypassed) |
+| `subscriptions` | Read own rows only | Full access (RLS bypassed) |
+| `webhook_events` | **No access** (no policies) | Full access (RLS bypassed) |
 
 ---
 
@@ -243,49 +263,15 @@ ALTER TABLE subscriptions ADD CONSTRAINT chk_stripe_customer_id_not_empty
 
 ---
 
-## Entitlement Logic
-
-Access policy is defined in `lib/config.ts` (`BILLING_CONFIG`). The **template default** is conservative:
-
-| Status                                                   | Default Access                                                          |
-| -------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `active`, `trialing`                                     | Full access                                                             |
-| `past_due`                                               | **No access** — override via `BILLING_CONFIG.pastDueGracePeriod = true` |
-| `canceled`, `unpaid`, `incomplete`, `incomplete_expired` | No access                                                               |
-| No subscription record                                   | No access                                                               |
-
-**Unknown-status handling:** Any status not matched by `lib/entitlements.ts` denies access by default.
-
----
-
-## RLS Expectations
-
-| Table            | Authenticated User Access   | Service-Role Access        |
-| ---------------- | --------------------------- | -------------------------- |
-| `profiles`       | Read/write own row only     | Full access (RLS bypassed) |
-| `subscriptions`  | Read own rows only          | Full access (RLS bypassed) |
-| `webhook_events` | **No access** (no policies) | Full access (RLS bypassed) |
-
-The service-role key bypasses RLS unconditionally — this is a Supabase platform behaviour, not a policy.
-
----
-
 ## Migration Strategy
 
 ### Initial Migration
 
-The repository ships with a real numbered migration file:
-
-`supabase/migrations/0001_initial.sql`
-
-This file contains all DDL from this document (tables, types, triggers, indexes, constraints, RLS enables, and policies). It must exist **before Stage 3 implementation begins**.
+`supabase/migrations/0001_initial.sql` contains all DDL from this document. Apply it with:
 
 ```bash
-# Apply to local Supabase
-npx supabase db reset
-
-# Apply to linked remote project
-npx supabase db push
+npx supabase db reset        # local
+npx supabase db push         # linked remote project
 ```
 
 ### Adding Migrations
@@ -298,43 +284,10 @@ npx supabase db push
 
 ### Adding Optional Modules
 
-Each optional module adds its own migration file. `workspaces` and `usage-billing` are **not** schema-neutral — they add tables with foreign-key relationships to `profiles` or `subscriptions`. Review carefully before activating.
-
-```sql
--- Example: workspaces module (own migration file)
-CREATE TABLE workspaces (
-  id UUID PRIMARY KEY,
-  owner_id UUID REFERENCES profiles(id),
-  name TEXT NOT NULL
-);
-```
+`workspaces` and `usage-billing` are **not** schema-neutral — they add tables with foreign-key relationships to `profiles` or `subscriptions`. Review carefully before activating.
 
 ### Rollback
 
 ```bash
-npx supabase db reset  # Reset to migration 0 (local only)
+npx supabase db reset  # local only
 ```
-
----
-
-## Performance Considerations
-
-```sql
--- Entitlement check (hot path)
-SELECT status, plan_id, current_period_end
-FROM subscriptions
-WHERE user_id = auth.uid()
-ORDER BY created_at DESC
-LIMIT 1;
-```
-
-All foreign keys and frequently queried columns are indexed.
-
----
-
-## Next Steps
-
-1. Generate `supabase/migrations/0001_initial.sql` from this document
-2. Run `npx supabase db reset` to verify the migration applies cleanly
-3. Generate TypeScript types: `npx supabase gen types typescript --local > lib/database.types.ts`
-4. Review RLS policies with multiple test users
