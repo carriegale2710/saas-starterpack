@@ -85,7 +85,7 @@ The `past_due` status represents a payment that is failing but not yet definitiv
 - **Transaction boundary:** the subscription upsert and `status = 'processed'` update execute in the same database transaction. A crash cannot leave a permanently misleading `processing` row — the transaction rolls back and the event is recovered by a stale-processing reset (timeout-based, see README)
 - Failed events retry with exponential backoff (optional cron)
 - **Canonical event list and INSERT pattern:** see `docs/schema.md` — Atomic Webhook Processing
-- **Stale recovery query:** see `README.md` — Webhook Atomicity & Stale-Processing Recovery
+- **Stale recovery query:** see `docs/schema.md` — Atomic Webhook Processing
 
 ---
 
@@ -163,13 +163,7 @@ The `past_due` status represents a payment that is failing but not yet definitiv
 
 **Decision:** Optional features are isolated in `lib/modules/*/` with clear interfaces
 
-**Module Contract:**
-
-```typescript
-// lib/modules/<module>/index.ts
-export function init(): void;
-export type { <ModuleType> };
-```
+**Module Contract:** see [`docs/guides/adding-a-module.md`](./guides/adding-a-module.md) for the full scaffold steps and interface requirements.
 
 **Consequences:**
 
@@ -359,6 +353,43 @@ This project uses a two-role AI workflow: a _research/orchestration_ role (Perpl
 
 ---
 
+## 18. Layered Documentation Strategy
+
+**Decision:** Split documentation into distinct layers with strict single ownership: `AGENTS.md` (orientation) → `CLAUDE.md` (rules) → `docs/architecture.md` (flows) → `docs/schema.md` (data) → `docs/decisions.md` (rationale). Each file owns a unique concern; cross-references use links, never copies.
+
+**Context (recorded 2026-08-19):**
+As the repo grew, key content (entitlement event list, stale-processing SQL, RLS service-role explanation, module contract pattern) was duplicated across 3–4 files. Duplicated docs drift out of sync — wrong docs hurt agent output more than missing docs. A DRY audit identified 6 high-priority and 4 medium-priority duplication issues.
+
+**Alternatives Considered:**
+
+| Alternative | Pros | Cons | Verdict |
+|---|---|---|---|
+| Single mega-doc (`CLAUDE.md` only) | One place to look | Becomes a wall of text; agents ingest it fully every task | Rejected |
+| `AGENTS.md` duplicates `CLAUDE.md` key rules | Redundant safety net | Drifts; two sources of truth for same rule | Rejected |
+| Separate doc per topic with no cross-references | Fully independent | Agents lose context when switching files | Rejected |
+| **Layered files, single ownership, links not copies** | No drift; fast orientation + deep reference | Requires discipline to maintain | **Accepted** |
+
+**Layer ownership:**
+
+| File | Owns | Does NOT own |
+|---|---|---|
+| `AGENTS.md` | Stack, commands, directory map, where-to-find-things, constraint *summary* | Rules, rationale, schema detail |
+| `CLAUDE.md` | All implementation rules, security constraints, naming, test strategy | Version numbers, decision rationale, schema SQL |
+| `docs/architecture.md` | System layer diagram, request flow sequences | Status tables, SQL, decision rationale |
+| `docs/schema.md` | Full SQL, RLS policies, entitlement status table, webhook processing SQL | Implementation rules, decision rationale |
+| `docs/decisions.md` | Rationale, alternatives considered, consequences | Rules, SQL, flow diagrams |
+| `docs/guides/*` | How-to steps for specific tasks | Architectural rules |
+
+**Consequences:**
+
+- When content moves, update one file and add a link from others — never paste the content again
+- `docs/guides/ai-agent-tips.md` documents the practical application of this principle for agents
+- `AGENTS.md` key constraints section is a *summary with links*, not a copy of `CLAUDE.md` rules
+- DRY audit should be run after any major structural change (prompt: "audit documentation for DRYness")
+- Factual bugs found during audits (e.g. webhook insert status `'processing'` → `'pending'`) should be fixed immediately — incorrect docs are worse than missing docs
+
+---
+
 ## Risks & Mitigations
 
 | Risk                          | Likelihood | Impact | Mitigation                                                             |
@@ -372,6 +403,7 @@ This project uses a two-role AI workflow: a _research/orchestration_ role (Perpl
 | Vercel cold starts            | Medium     | Low    | Pro tier, optimize bundle size                                         |
 | Nav config dropped in rewrite | Low        | High   | Covered by `tests/config.test.ts` + `tests/nav.test.ts`                |
 | AI model regression           | Low        | Medium | Decision #17 fallback: Sonnet 4.6; reassess at Stage 5                 |
+| Doc drift / duplication       | Medium     | Medium | ADR-18 single-ownership principle; periodic DRY audit                  |
 
 ---
 

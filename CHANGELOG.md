@@ -7,7 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- `AGENTS.md` — tool-agnostic agent orientation layer (stack, commands, directory map, where-to-find-things, key constraints summary). Reads before `CLAUDE.md`. Covers Cursor, Copilot, Windsurf, and Claude Code.
+- `docs/architecture.md` — system layer diagram, request flow sequences (auth, webhook, checkout, authenticated page), entitlement logic call chain. Links out to `schema.md` and `decisions.md` rather than repeating their content.
+- `docs/guides/adding-a-module.md` — step-by-step guide for scaffolding and removing optional feature modules. Owns the module contract (`init()` export pattern).
+- `docs/guides/ai-agent-tips.md` — file structure and documentation tips optimised for AI agent workflows. Covers naming conventions, comment strategy, what to avoid.
+- ADR-18 in `docs/decisions.md` — documents the layered documentation strategy and single-ownership principle.
+
 ### Changed
+- `CLAUDE.md` — DRY pass: removed duplicated 5-event Stripe list (now links to `schema.md`); removed stale-processing SQL (now links to `schema.md`); removed module contract code block (now links to guide); removed "Decisions Requiring Approval" section (stale); trimmed §5, §9, §11, §12 verbose prose; added `AGENTS.md` to directory tree.
+- `docs/README.md` — merged reading order list and reference docs table into one numbered table; added `AGENTS.md` as step 1 in reading order; added `architecture.md`, `ai-agent-tips.md`, `adding-a-module.md` to index.
+- `docs/schema.md` — removed stale "Next Steps" section; collapsed "Performance Considerations" to inline comment; trimmed repeated RLS service-role explanation to one canonical location (RLS Expectations section).
+- `docs/architecture.md` — fixed factual bug: webhook insert status was incorrectly shown as `'processing'` (corrected to `'pending'` + explicit claim step); removed duplicated entitlement status table (now links to `schema.md`); removed duplicated decisions summary table (now links to `decisions.md`); removed duplicated module bullets (now links to guide).
+- `AGENTS.md` — updated where-to-find-things table: added `ai-agent-tips.md` entry; corrected local setup row to point to `README.md` Quick Start.
+
+### Changed (previous unreleased)
 - `CLAUDE.md` — removed stale `stripe@16.3.0` / `2024-06-20` version values; replaced with pointer to `docs/decisions.md` Decision #12 as single source of truth; removed duplicate risks table (now only in `decisions.md`); added `<!-- sync: decisions.md -->` comments on all sections that reference values owned elsewhere; added "Keeping This File Fresh" section with explicit rules
 - `docs/prompt-plan.md` — corrected Stage 4 "Confirmed Versions" block to `stripe@17.x` / `2025-11-20.acacia`; added `docs/decisions.md` to Living Document Policy table (was missing); added single-ownership rule to Documentation Layout section; added step 2 to Per-Stage Workflow (re-read `CLAUDE.md` + `decisions.md` before coding); added `<!-- sync -->` marker to Stage 4 versions block; added `CLAUDE.md` consistency check to Stage 6 audit list
 - `docs/prompt-plan.md` — added Stage Close checklist to Stages 4–8: doc staleness audit, `CHANGELOG.md` entry, `decisions.md` review, `CLAUDE.md` sync check, Living Document Policy sweep
@@ -64,7 +78,7 @@ Phase 1 complete. Foundation is stable, all tests passing, CI green.
 - `tests/README.md` — test suite documentation
 - `.env.example` with all required variables
 - `CHANGELOG.md`
-- `docs/decisions.md` — 16 ADRs covering architecture, tooling, and conventions
+- `docs/decisions.md` — 17 ADRs covering architecture, tooling, and conventions
 - `docs/implementation-plan.md` — phased build plan with acceptance gates
 - `docs/schema.md` — full database schema documentation
 
@@ -85,3 +99,4 @@ Phase 1 complete. Foundation is stable, all tests passing, CI green.
 - ADR-14: Nav links in `lib/config.ts`
 - ADR-15: Vitest env setup file
 - ADR-16: Stripe `current_period_start/end` breaking change (SDK v18 / API basil)
+- ADR-17: AI Toolchain: Perplexity Pro + Claude Sonnet 5 + GitHub MCP
