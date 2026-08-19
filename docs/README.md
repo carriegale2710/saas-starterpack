@@ -8,11 +8,13 @@ This folder contains all living documentation for the saas-starterpack project. 
 
 For AI-assisted sessions, read in this order before touching any file:
 
-1. [`../CLAUDE.md`](../CLAUDE.md) — repo rules, naming conventions, and AI session constraints
-2. [`decisions.md`](./decisions.md) — all architectural decisions, trade-offs, and rejected alternatives
-3. [`schema.md`](./schema.md) — canonical database schema, RLS policies, entitlement logic
-4. [`implementation-plan.md`](./implementation-plan.md) — current stage, acceptance gates, and task breakdown
-5. [`prompt-plan.md`](./prompt-plan.md) — per-stage AI workflow and prompt templates
+1. [`../AGENTS.md`](../AGENTS.md) — orientation map: stack, commands, directory map, where-to-find-things
+2. [`../CLAUDE.md`](../CLAUDE.md) — repo rules, naming conventions, and AI session constraints
+3. [`decisions.md`](./decisions.md) — all architectural decisions, trade-offs, and rejected alternatives
+4. [`architecture.md`](./architecture.md) — system data flow, request lifecycles, entitlement logic
+5. [`schema.md`](./schema.md) — canonical database schema, RLS policies, entitlement logic
+6. [`implementation-plan.md`](./implementation-plan.md) — current stage, acceptance gates, and task breakdown
+7. [`prompt-plan.md`](./prompt-plan.md) — per-stage AI workflow and prompt templates
 
 ---
 
@@ -20,7 +22,8 @@ For AI-assisted sessions, read in this order before touching any file:
 
 | File | Purpose |
 |---|---|
-| [`decisions.md`](./decisions.md) | Architectural decision log (17 decisions) — why things are the way they are |
+| [`architecture.md`](./architecture.md) | System layers, request flows, auth flow, entitlement logic |
+| [`decisions.md`](./decisions.md) | Architectural decision log — why things are the way they are |
 | [`schema.md`](./schema.md) | Full Supabase PostgreSQL schema, RLS, migrations, entitlement table |
 | [`toolchain.md`](./toolchain.md) | AI toolchain setup, model selection, session startup checklist |
 | [`implementation-plan.md`](./implementation-plan.md) | Staged build plan with acceptance gates |
@@ -31,10 +34,12 @@ For AI-assisted sessions, read in this order before touching any file:
 ## Subdirectories
 
 ### `guides/`
-How-to guides for connectors and integrations.
+How-to and reference guides.
 
 | File | Purpose |
 |---|---|
+| [`guides/ai-agent-tips.md`](./guides/ai-agent-tips.md) | File structure and documentation tips optimised for AI agent workflows |
+| [`guides/adding-a-module.md`](./guides/adding-a-module.md) | How to scaffold and remove an optional feature module |
 | [`guides/perplexity-github-connector.md`](./guides/perplexity-github-connector.md) | Setting up and using the Perplexity → GitHub MCP connector |
 | [`guides/perplexity-supabase-connector.md`](./guides/perplexity-supabase-connector.md) | Setting up and using the Perplexity → Supabase MCP connector |
 

@@ -83,16 +83,23 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 │   └── README.md
 ├── docs/
 │   ├── archive/              # Superseded drafts
-│   ├── guides/               # How-to guides
-│   ├── microsaas-playbook/   # Playbook content
+│   ├── guides/
+│   │   ├── ai-agent-tips.md          # File structure + doc tips for AI agent workflows
+│   │   ├── adding-a-module.md        # How to scaffold an optional module
+│   │   ├── perplexity-github-connector.md
+│   │   └── perplexity-supabase-connector.md
+│   ├── playbook/             # Playbook content
+│   ├── architecture.md       # System layers, request flows, entitlement logic
 │   ├── implementation-plan.md
 │   ├── schema.md
 │   ├── decisions.md
+│   ├── toolchain.md
 │   └── prompt-plan.md
 ├── .github/
 │   └── workflows/
 │       └── ci.yml            # 3 parallel jobs: validate → build + test
 ├── .env.example
+├── AGENTS.md                 # Tool-agnostic agent orientation (read before CLAUDE.md)
 ├── CHANGELOG.md
 ├── README.md
 └── CLAUDE.md
