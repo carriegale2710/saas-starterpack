@@ -42,6 +42,7 @@ Perplexity Pro must update the following files as part of completing each stage 
 | `CHANGELOG.md` | Any commit with functional or structural changes |
 | `README.md` | Routes, env vars, setup steps, or stack changed |
 | `CLAUDE.md` | Convention added, renamed, or removed |
+| `CLAUDE.md` Section 1 directory tree | Any file or folder added, moved, or deleted |
 | `docs/decisions.md` | Any version number, risk, ADR rationale, or architectural choice changed |
 | `tests/README.md` | Test files added, changed, or skeleton activated |
 
@@ -62,6 +63,8 @@ The architecture stage produces a split documentation set:
 
 **Single-ownership rule:** version numbers and risks live in `docs/decisions.md` only. `CLAUDE.md` and `implementation-plan.md` reference them; they do not duplicate them.
 
+**Directory tree rule:** the `CLAUDE.md` Section 1 directory tree is the single source of truth for repo structure. Update it in the same commit that adds, moves, or deletes any file or folder.
+
 ---
 
 ## Stage Close Checklist
@@ -71,7 +74,7 @@ Run this at the end of **every stage** before the git commit. This is not option
 - [ ] All stage tasks and acceptance gates passed
 - [ ] `docs/decisions.md` — new ADRs recorded; version numbers and risks up to date
 - [ ] `CHANGELOG.md` — `[Unreleased]` section updated with all changes from this stage
-- [ ] `CLAUDE.md` — `<!-- sync: decisions.md -->` markers checked; conventions current
+- [ ] `CLAUDE.md` — directory tree (Section 1) updated for any added/moved/deleted files; `<!-- sync: decisions.md -->` markers checked; conventions current
 - [ ] `docs/implementation-plan.md` — tasks ticked; gates marked; Living Document Policy followed
 - [ ] `docs/prompt-plan.md` — this file's stage checklist ticked; prompt updated if approach changed
 - [ ] `README.md` — routes, env vars, and setup steps still accurate
@@ -366,7 +369,7 @@ Before finishing, identify contradictions and unnecessary complexity, and ask no
 
 - [x] `docs/decisions.md` — ADRs 1–16 recorded
 - [x] `CHANGELOG.md` — 0.1.0 entry complete
-- [x] `CLAUDE.md` — conventions current, sync markers in place
+- [x] `CLAUDE.md` — conventions current, sync markers in place, directory tree accurate
 - [x] `docs/implementation-plan.md` — Phase 1 fully checked off
 - [x] `docs/prompt-plan.md` — this checklist
 - [x] `README.md` — accurate
@@ -479,7 +482,7 @@ This project uses Next.js 15. Apply these patterns:
 
 - [x] `docs/decisions.md` — ADR-6, ADR-7, ADR-9 confirmed
 - [x] `CHANGELOG.md` — 0.1.0 entry covers foundation work
-- [x] `CLAUDE.md` — directory structure, npm rule, env validation current
+- [x] `CLAUDE.md` — directory structure, npm rule, env validation current, directory tree accurate
 - [x] `docs/implementation-plan.md` — Phase 1.1 checked off
 - [x] `README.md` — accurate
 - [x] `tests/README.md` — N/A this stage
@@ -630,7 +633,7 @@ Update README, docs/schema.md, and CLAUDE.md if new conventions are introduced.
 
 - [x] `docs/decisions.md` — ADR-11 (RLS), ADR-14 (nav), ADR-15 (setup.ts), ADR-16 (Stripe basil) recorded
 - [x] `CHANGELOG.md` — 0.1.0 and 0.1.1 entries cover all auth and test scaffold work
-- [x] `CLAUDE.md` — RLS rules, service-role boundary, nav convention current
+- [x] `CLAUDE.md` — RLS rules, service-role boundary, nav convention current, directory tree accurate
 - [x] `docs/implementation-plan.md` — Phases 1.2, 1.3, 1.4, 1.5 checked off
 - [x] `docs/schema.md` — migration and RLS policies documented
 - [x] `README.md` — auth routes, env vars accurate
@@ -784,7 +787,7 @@ Manual checks:
 - [ ] Manual verification checklist complete
 - [ ] `docs/decisions.md` — any new ADRs? Stripe version values still correct?
 - [ ] `CHANGELOG.md` — `[Unreleased]` updated with all Phase 2 changes
-- [ ] `CLAUDE.md` — Section 7 `<!-- sync -->` marker still pointing at correct Decision #12 values
+- [ ] `CLAUDE.md` — directory tree (Section 1) updated for all new Stripe files; Section 7 `<!-- sync -->` marker still pointing at correct Decision #12 values
 - [ ] `docs/implementation-plan.md` — Phase 2.1, 2.2, 2.3 tasks ticked; gates marked
 - [ ] `docs/prompt-plan.md` — this checklist ticked
 - [ ] `README.md` — Stripe env vars, webhook setup, stale-recovery query documented
@@ -886,7 +889,7 @@ npx supabase db push
 - [ ] Core app still builds and runs with all module env vars removed
 - [ ] `docs/decisions.md` — new ADR for each selected module; schema impacts documented
 - [ ] `CHANGELOG.md` — `[Unreleased]` updated with all module additions
-- [ ] `CLAUDE.md` — optional module boundary rules still accurate
+- [ ] `CLAUDE.md` — directory tree (Section 1) updated for all new module files under `lib/modules/`; optional module boundary rules still accurate
 - [ ] `docs/implementation-plan.md` — Phase 3 env/config tasks updated
 - [ ] `docs/prompt-plan.md` — this checklist ticked
 - [ ] `README.md` — module setup and removal instructions documented
@@ -926,6 +929,7 @@ Verify:
 - Default `past_due` denial policy
 - Workspaces and usage-billing schema-impact warnings
 - **`CLAUDE.md` consistent with `docs/decisions.md`** — check all `<!-- sync -->` markers
+- **`CLAUDE.md` Section 1 directory tree** — verify it matches the actual repo structure
 
 Apply documentation corrections before the implementation step.
 
@@ -995,7 +999,7 @@ Fix documentation that references missing commands, missing files, or outdated c
 - [ ] Playwright suite passing
 - [ ] `docs/decisions.md` — all ADRs reflect final implementation; no placeholders
 - [ ] `CHANGELOG.md` — `[Unreleased]` covers all test and doc additions
-- [ ] `CLAUDE.md` — every `<!-- sync -->` marker verified against `decisions.md`; no stale values
+- [ ] `CLAUDE.md` — directory tree (Section 1) verified against actual repo; every `<!-- sync -->` marker verified against `decisions.md`; no stale values
 - [ ] `docs/implementation-plan.md` — Phase 3.2 documentation tasks checked off
 - [ ] `docs/prompt-plan.md` — this checklist ticked
 - [ ] `README.md` — every command verified against actual `package.json` scripts
@@ -1053,7 +1057,7 @@ Create docs/security-review.md documenting findings, fixes applied, and remainin
 - [ ] All critical and high findings fixed; `docs/security-review.md` created
 - [ ] `docs/decisions.md` — security findings and mitigations added to Risks table
 - [ ] `CHANGELOG.md` — `[Unreleased]` covers all security fixes
-- [ ] `CLAUDE.md` — any new security rules or constraints added
+- [ ] `CLAUDE.md` — directory tree (Section 1) updated if `docs/security-review.md` or any new file was added; any new security rules or constraints added
 - [ ] `docs/implementation-plan.md` — Phase 3.2 security tasks checked off
 - [ ] `docs/prompt-plan.md` — this checklist ticked
 - [ ] `README.md` — security notes updated if any operational change required
@@ -1127,7 +1131,7 @@ grep -R "pnpm\|yarn\|src/lib\|stripe_events" . \
 - [ ] All acceptance criteria verified via clean checkout
 - [ ] `docs/decisions.md` — final ADR list complete; Risks table reflects post-fix state
 - [ ] `CHANGELOG.md` — `[Unreleased]` promoted to a versioned release entry (e.g. `[0.2.0]`); `[Unreleased]` reset to empty
-- [ ] `CLAUDE.md` — final sync check; all `<!-- sync -->` markers verified
+- [ ] `CLAUDE.md` — directory tree (Section 1) final check — must match clean checkout exactly; all `<!-- sync -->` markers verified
 - [ ] `docs/implementation-plan.md` — all phases and gates marked complete
 - [ ] `docs/prompt-plan.md` — all stage checklists ticked
 - [ ] `README.md` — final review; every command tested from clean checkout
