@@ -8,24 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
-- `AGENTS.md` — tool-agnostic agent orientation layer (stack, commands, directory map, where-to-find-things, key constraints summary). Reads before `CLAUDE.md`. Covers Cursor, Copilot, Windsurf, and Claude Code.
-- `docs/architecture.md` — system layer diagram, request flow sequences (auth, webhook, checkout, authenticated page), entitlement logic call chain. Links out to `schema.md` and `decisions.md` rather than repeating their content.
-- `docs/guides/adding-a-module.md` — step-by-step guide for scaffolding and removing optional feature modules. Owns the module contract (`init()` export pattern).
-- `docs/guides/ai-agent-tips.md` — file structure and documentation tips optimised for AI agent workflows. Covers naming conventions, comment strategy, what to avoid.
-- ADR-18 in `docs/decisions.md` — documents the layered documentation strategy and single-ownership principle.
+- `AGENTS.md` — tool-agnostic agent orientation layer for Cursor, Copilot, Windsurf, and Claude Code
+- `docs/architecture.md` — system layer diagram, request flow sequences, and entitlement logic chain
+- `docs/guides/adding-a-module.md` — guide for scaffolding and removing optional feature modules
+- `docs/guides/ai-agent-tips.md` — documentation and naming tips optimised for AI agent workflows
+- ADR-18 in `docs/decisions.md` — layered documentation strategy and single-ownership principle
 
 ### Changed
-- `CLAUDE.md` — DRY pass: removed duplicated 5-event Stripe list (now links to `schema.md`); removed stale-processing SQL (now links to `schema.md`); removed module contract code block (now links to guide); removed "Decisions Requiring Approval" section (stale); trimmed §5, §9, §11, §12 verbose prose; added `AGENTS.md` to directory tree.
-- `docs/README.md` — merged reading order list and reference docs table into one numbered table; added `AGENTS.md` as step 1 in reading order; added `architecture.md`, `ai-agent-tips.md`, `adding-a-module.md` to index.
-- `docs/schema.md` — removed stale "Next Steps" section; collapsed "Performance Considerations" to inline comment; trimmed repeated RLS service-role explanation to one canonical location (RLS Expectations section).
-- `docs/architecture.md` — fixed factual bug: webhook insert status was incorrectly shown as `'processing'` (corrected to `'pending'` + explicit claim step); removed duplicated entitlement status table (now links to `schema.md`); removed duplicated decisions summary table (now links to `decisions.md`); removed duplicated module bullets (now links to guide).
-- `AGENTS.md` — updated where-to-find-things table: added `ai-agent-tips.md` entry; corrected local setup row to point to `README.md` Quick Start.
-
-### Changed (previous unreleased)
-- `CLAUDE.md` — removed stale `stripe@16.3.0` / `2024-06-20` version values; replaced with pointer to `docs/decisions.md` Decision #12 as single source of truth; removed duplicate risks table (now only in `decisions.md`); added `<!-- sync: decisions.md -->` comments on all sections that reference values owned elsewhere; added "Keeping This File Fresh" section with explicit rules
-- `docs/prompt-plan.md` — corrected Stage 4 "Confirmed Versions" block to `stripe@17.x` / `2025-11-20.acacia`; added `docs/decisions.md` to Living Document Policy table (was missing); added single-ownership rule to Documentation Layout section; added step 2 to Per-Stage Workflow (re-read `CLAUDE.md` + `decisions.md` before coding); added `<!-- sync -->` marker to Stage 4 versions block; added `CLAUDE.md` consistency check to Stage 6 audit list
-- `docs/prompt-plan.md` — added Stage Close checklist to Stages 4–8: doc staleness audit, `CHANGELOG.md` entry, `decisions.md` review, `CLAUDE.md` sync check, Living Document Policy sweep
-- `docs/implementation-plan.md` — added `docs/decisions.md` as step 7 in Living Document Policy (was missing); added Stage Close Checklist section
+- `CLAUDE.md` — DRY pass: removed duplicated content now owned by `schema.md`, guides, and `decisions.md`; trimmed verbose prose sections
+- `docs/README.md` — consolidated reading order and reference index into a single numbered table
+- `docs/schema.md` — removed stale sections; trimmed repeated explanations to single canonical locations
+- `docs/architecture.md` — fixed webhook status bug (`pending` not `processing`); removed content now owned by `schema.md` and `decisions.md`
+- `AGENTS.md` — updated where-to-find-things table with new guide entries
+- `docs/prompt-plan.md` — added Stage Close checklist (doc audit, changelog, decisions review, sync check) to Stages 4–8; corrected Stripe version values
+- `docs/implementation-plan.md` — added Stage Close Checklist section; added `decisions.md` to Living Document Policy
 
 ---
 
@@ -34,69 +30,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Pre-Phase-2 cleanup and test scaffolding. No functional changes.
 
 ### Added
-- `tests/fixtures/subscriptions.ts` — typed `MockSubscription` fixtures for all 8 subscription statuses; keyed as `Record<SubscriptionStatus, MockSubscription>` so TypeScript catches missing statuses
-- `tests/fixtures/webhook-events.ts` — plain-object Stripe event payloads for all 5 entitlement-controlling events + `ignoredEventFixtures` (events the handler must swallow without crashing)
-- `tests/webhook.test.ts` — skeleton test suite: idempotency logic, event routing contracts, stale-processing recovery threshold; commented assertions activate as Phase 2 handler is implemented
-- `tests/billing.test.ts` — skeleton test suite: checkout session contract (metadata, mode, redirect URL), subscription fixture coverage, `BILLING_CONFIG` policy assertions
+- `tests/fixtures/subscriptions.ts` — typed `MockSubscription` fixtures for all 8 subscription statuses
+- `tests/fixtures/webhook-events.ts` — Stripe event payloads for all 5 entitlement-controlling events plus ignored event fixtures
+- `tests/webhook.test.ts` — skeleton suite: idempotency, event routing, stale-processing recovery
+- `tests/billing.test.ts` — skeleton suite: checkout session contract, subscription fixtures, `BILLING_CONFIG` policy assertions
 
 ### Changed
-- `.github/workflows/ci.yml` — restructured from 1 job to 3 parallel jobs:
-  - `validate` (lint + typecheck, ~30s) runs first
-  - `build` (Next.js build) and `test` (vitest + coverage) run in parallel after validate
-  - Shared `env:` block at workflow level — no duplication across jobs
-  - `npm run build` now runs in CI, catching Next.js build errors that typecheck alone misses
-- `tests/README.md` — updated with fixture documentation, CI job diagram, skeleton test conventions
-- `README.md` — Node.js version corrected to 22 LTS; Next.js version corrected to 15; Stripe features correctly marked as Phase 2; env vars table split by phase; `BILLING_PAST_DUE_GRACE` reference corrected to `BILLING_CONFIG.pastDueGracePeriod`
-- `CLAUDE.md` — synced with new conventions: Node 22, `database.types.ts` regeneration rule, nav in `lib/config.ts` (ADR-14), `tests/setup.ts` sync rule (ADR-15), CI workflow documented, actual test file list updated
+- `.github/workflows/ci.yml` — refactored to 3 parallel jobs: `validate` → `build` + `test`; shared `env:` block; `npm run build` added to CI
+- `tests/README.md` — updated with fixture docs and CI job diagram
+- `README.md` — corrected Node.js (22 LTS) and Next.js (15) versions; split env vars table by phase; fixed `BILLING_CONFIG` reference
+- `CLAUDE.md` — synced Node 22, `database.types.ts` regen rule, CI workflow, test file list
 
 ---
 
 ## [0.1.0] — 2026-08-19
 
-Phase 1 complete. Foundation is stable, all tests passing, CI green.
+Phase 1 complete. Foundation stable, all tests passing, CI green.
 
 ### Added
-- Next.js 15 App Router project with TypeScript strict mode
-- Tailwind CSS + shadcn/ui-style component system
+- Next.js 15 App Router with TypeScript strict mode, Tailwind CSS, and shadcn/ui-style components
 - Supabase integration: browser client, server client, SSR middleware
-- Database schema: `profiles`, `subscriptions`, `webhook_events` with RLS policies
-- Migration `supabase/migrations/0001_initial.sql` applied to Supabase project
+- Database schema: `profiles`, `subscriptions`, `webhook_events` with RLS policies and initial migration
 - Environment validation at startup via `lib/env.ts` (Zod)
 - Auth flow: `/login`, `/signup`, `/auth/callback`, `/dashboard` (protected)
-- `SignOutButton` wired into `DashboardNav`
-- `APP_CONFIG`, `BILLING_CONFIG`, `MARKETING_NAV`, `DASHBOARD_NAV` exported from `lib/config.ts`
-- `lib/entitlements.ts` — `hasActiveSubscription()` and `requireActiveSubscription()` with `BILLING_CONFIG.pastDueGracePeriod` policy
-- `lib/database.types.ts` — generated from live Supabase schema; includes `SubscriptionStatus` and `WebhookEventStatus` type aliases
-- GitHub Actions CI workflow (`.github/workflows/ci.yml`) — lint, typecheck, tests on every push/PR to `main`
-- Vitest test suite: 5 suites, 20 tests, all passing ✅
-  - `tests/config.test.ts` — APP_CONFIG and BILLING_CONFIG shape
-  - `tests/entitlements.test.ts` — access logic for all subscription statuses
-  - `tests/env.test.ts` — Zod env schema validation
-  - `tests/nav.test.ts` — nav array shape, uniqueness, group isolation
-  - `tests/rls.test.ts` — RLS policy documentation tests
-- `tests/setup.ts` — env var stubs so `lib/env.ts` doesn't crash at Vitest import time
-- `tests/README.md` — test suite documentation
-- `.env.example` with all required variables
-- `CHANGELOG.md`
-- `docs/decisions.md` — 17 ADRs covering architecture, tooling, and conventions
+- `lib/entitlements.ts` — `hasActiveSubscription()` and `requireActiveSubscription()`
+- `lib/config.ts` — `APP_CONFIG`, `BILLING_CONFIG`, `MARKETING_NAV`, `DASHBOARD_NAV`
+- `lib/database.types.ts` — generated from live Supabase schema; `SubscriptionStatus` and `WebhookEventStatus` type aliases
+- GitHub Actions CI workflow — lint, typecheck, and tests on every push/PR to `main`
+- Vitest test suite: 5 suites, 20 tests, all passing (`config`, `entitlements`, `env`, `nav`, `rls`)
+- `tests/setup.ts`, `tests/README.md`, `.env.example`, `CHANGELOG.md`
+- `docs/decisions.md` — ADRs 1–17 covering architecture, tooling, and conventions
 - `docs/implementation-plan.md` — phased build plan with acceptance gates
 - `docs/schema.md` — full database schema documentation
 
-### Architecture decisions recorded
-- ADR-1: Modular monolith (no microservices)
-- ADR-2: Supabase managed PostgreSQL with RLS
-- ADR-3: Stripe webhooks as source of truth
-- ADR-4: Atomic webhook claim pattern (no Redis)
-- ADR-5: shadcn/ui-style components
-- ADR-6: Next.js App Router
-- ADR-7: No ORM (raw Supabase client)
-- ADR-8: Zod env validation at runtime
-- ADR-9: npm as package manager
-- ADR-10: Optional module boundaries
-- ADR-11: Security boundaries (RLS mandatory)
-- ADR-12: Stripe SDK + API version pinning
-- ADR-13: Audit flag review (Stage 2)
-- ADR-14: Nav links in `lib/config.ts`
-- ADR-15: Vitest env setup file
-- ADR-16: Stripe `current_period_start/end` breaking change (SDK v18 / API basil)
-- ADR-17: AI Toolchain: Perplexity Pro + Claude Sonnet 5 + GitHub MCP
+### Architecture Decisions (ADR-1 – ADR-17)
+- Modular monolith, Supabase PostgreSQL with RLS, Stripe webhooks as source of truth
+- Atomic webhook claim (no Redis), shadcn/ui-style components, Next.js App Router
+- No ORM, Zod env validation, npm, optional module boundaries, mandatory RLS
+- Stripe SDK + API version pinning, nav in `lib/config.ts`, Vitest env setup
+- Stripe `current_period_start/end` breaking change (SDK v18/basil), AI toolchain (Perplexity Pro + Claude Sonnet 5 + GitHub MCP)
