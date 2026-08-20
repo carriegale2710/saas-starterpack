@@ -1,4 +1,4 @@
-# Guide: Optimising AI Agent Workflows
+# Documentation Guide: Optimising AI Agent Workflows
 
 This guide defines in-scope guidance for keeping AI-agent work in this repository accurate, focused, and maintainable: file discovery, documentation ownership, concise edits, and verification.
 
