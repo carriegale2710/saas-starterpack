@@ -1,8 +1,8 @@
 # CLAUDE.md — Implementation Rules
 
-<!-- This file owns: coding rules, security constraints, directory structure, naming conventions. -->
-<!-- It does NOT own: version numbers, risk tables, ADR rationale — those live in docs/decisions.md. -->
-<!-- Before every stage: verify this file is consistent with docs/decisions.md and docs/implementation-plan.md. -->
+<!-- Scope: implementation rules, security constraints, repository structure, naming, testing, and documentation maintenance. -->
+<!-- Source of truth: use docs/decisions.md for rationale, risks, and pinned versions; use docs/implementation-plan.md for phase status. -->
+<!-- Maintenance rule: edit existing content, do not append duplicate update blocks. -->
 
 ## Project Context
 
@@ -25,91 +25,57 @@ This is a **minimal, maintainable modular monolith** for solo-founder subscripti
 
 ---
 
-## Implementation Rules
-
-### 1. Directory Structure
+## Repository Structure
 
 ```text
 /
-├── app/
-│   ├── (marketing)/          # Public pages (/, /pricing, /about)
-│   ├── (auth)/               # Auth pages (/login, /signup, /forgot-password)
-│   ├── (dashboard)/          # Protected pages (/dashboard, /profile, /billing)
-│   ├── api/
-│   │   ├── stripe/
-│   │   │   ├── checkout/route.ts
-│   │   │   ├── portal/route.ts
-│   │   │   └── webhook/route.ts
-│   │   └── auth/
-│   │       └── callback/route.ts
-│   ├── layout.tsx
-│   └── globals.css
-├── components/
-│   ├── ui/                   # shadcn/ui-style components
-│   ├── marketing/            # Public page components
-│   ├── dashboard/            # Protected page components
-│   └── shared/               # Shared components (nav, footer)
-├── lib/                      # Canonical path — do NOT use src/lib/
-│   ├── vendor/
-│   │   ├── supabase/
-│   │   │   ├── client.ts
-│   │   │   ├── server.ts
-│   │   │   └── rls.ts
-│   │   └── stripe/
-│   │       ├── client.ts
-│   │       ├── checkout.ts
-│   │       ├── portal.ts
-│   │       └── webhook.ts
-│   ├── modules/              # Optional modules (opt-in) — see §4
-│   ├── config.ts             # Central product configuration (includes billing policy)
-│   ├── database.types.ts     # Generated from Supabase schema — regenerate after migrations
-│   ├── env.ts                # Environment validation (Zod)
-│   └── entitlements.ts       # Subscription entitlement logic
-├── supabase/
-│   └── migrations/
-│       └── 0001_initial.sql
-├── tests/
-│   ├── fixtures/
-│   │   ├── subscriptions.ts  # Typed MockSubscription for all 8 statuses
-│   │   └── webhook-events.ts # Stripe event payloads for all 5 entitlement events + ignored
-│   ├── setup.ts              # Stubs env vars — must stay in sync with lib/env.ts
-│   ├── config.test.ts
-│   ├── entitlements.test.ts
-│   ├── env.test.ts
-│   ├── nav.test.ts
-│   ├── rls.test.ts
-│   ├── webhook.test.ts       # Skeleton — activates in Phase 2
-│   ├── billing.test.ts       # Skeleton — activates in Phase 2
-│   └── README.md
+├── app/                    # Routes and layouts
+├── components/             # ui, marketing, dashboard, shared
+├── lib/                    # Canonical application logic; never create src/lib/
+│   ├── vendor/             # Supabase and Stripe integrations
+│   ├── modules/            # Optional modules
+│   ├── config.ts           # Product and billing configuration
+│   ├── database.types.ts   # Generated Supabase types
+│   ├── env.ts              # Zod environment validation
+│   └── entitlements.ts     # Subscription access logic
+├── supabase/migrations/    # Database migrations
+├── tests/                  # Vitest tests and fixtures
 ├── docs/
-│   ├── archive/              # Superseded drafts
-│   ├── guides/
-│   │   ├── ai-agent-tips.md          # File structure + doc tips for AI agent workflows
-│   │   ├── adding-a-module.md        # How to scaffold an optional module
-│   │   ├── perplexity-github-connector.md
-│   │   └── perplexity-supabase-connector.md
-│   ├── playbook/             # Playbook content
-│   ├── architecture.md       # System layers, request flows, entitlement logic
-│   ├── implementation-plan.md
-│   ├── schema.md
-│   ├── decisions.md
-│   ├── toolchain.md
-│   └── prompt-plan.md
-├── .github/
-│   └── workflows/
-│       └── ci.yml            # 3 parallel jobs: validate → build + test
-├── .env.example
-├── AGENTS.md                 # Tool-agnostic agent orientation (read before CLAUDE.md)
-├── CHANGELOG.md
-├── README.md
-└── CLAUDE.md
+│   ├── archive/            # Superseded drafts
+│   ├── guides/             # Task-specific procedures and AI workflow guidance
+│   ├── playbook/           # Product and delivery playbook
+│   ├── architecture.md     # System behaviour and data flow
+│   ├── decisions.md        # Decision rationale, risks, and pinned versions
+│   ├── implementation-plan.md # Current phase and task status
+│   ├── schema.md           # Database contract and RLS expectations
+│   ├── toolchain.md        # Tooling conventions
+│   └── prompt-plan.md      # Agent workflow prompts
+├── .github/workflows/ci.yml
+├── AGENTS.md               # Tool-agnostic agent orientation
+├── CHANGELOG.md            # User-facing release history
+├── README.md               # Setup, usage, migration, and deployment
+└── CLAUDE.md               # Claude-specific implementation rules
 ```
+
+The tree above is the repository-structure source of truth. Update it in the same change whenever a file or directory is added, moved, renamed, or deleted.
 
 **Naming rules:**
 
 - Use `lib/` at the project root. Never use `src/lib/` or mix the two.
 - The webhook event log table is named `webhook_events` everywhere — in SQL, code, and docs. Never use `stripe_events`.
 - Nav links (`MARKETING_NAV`, `DASHBOARD_NAV`) live in `lib/config.ts` — single source of truth. Never duplicate them in component files.
+
+## Implementation Rules
+
+### 1. Boundaries and naming
+
+- Use `lib/` at the project root. Never use `src/lib/` or mix the two.
+- Keep vendor-specific code in `lib/vendor/`.
+- Keep optional features in `lib/modules/`; do not include them in the core by default.
+- Use descriptive, domain-specific names. Avoid generic `utils.ts`, `helpers.ts`, `data.ts`, `store.ts`, and `misc/`.
+- Use `index.ts` only as a module’s public API entry point.
+- Keep navigation arrays in `lib/config.ts`; do not duplicate them in components.
+- The webhook event log table is named `webhook_events` everywhere — in SQL, code, and docs. Never use `stripe_events`.
 
 ### 2. Security Constraints
 
@@ -132,6 +98,8 @@ const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 ```
+
+- Validate environment variables through `lib/env.ts`; never read required configuration directly from `process.env` in application logic.
 
 #### Row Level Security
 
@@ -181,7 +149,9 @@ export const BILLING_CONFIG = {
 } as const;
 ```
 
-`lib/entitlements.ts` reads `BILLING_CONFIG.pastDueGracePeriod` — never hard-code the `past_due` rule inline. Full entitlement status table → [`docs/schema.md` → Entitlement Logic](./docs/schema.md#entitlement-logic).
+Keep product policy in `lib/config.ts`. In particular, `lib/entitlements.ts` must read the `pastDueGracePeriod` policy rather than hard-code it. Full entitlement status table → [`docs/schema.md` → Entitlement Logic](./docs/schema.md#entitlement-logic).
+
+Pinned versions and upgrade rationale belong in [`docs/decisions.md`](./docs/decisions.md), not here. Do not duplicate version tables or risk analysis.
 
 ### 4. Scope Boundaries
 
@@ -290,35 +260,13 @@ Never leave `lib/database.types.ts` empty or with placeholder types — CI will 
 
 `MARKETING_NAV` and `DASHBOARD_NAV` are exported from `lib/config.ts` — single source of truth for all navigation. Components must import from there, never define their own arrays. `nav.test.ts` asserts shape, label uniqueness, and group isolation — update it if the nav shape changes.
 
-### 10. Testing Strategy
+## 10. Testing and CI
 
-**Framework:** Vitest. `tests/setup.ts` stubs all env vars required by `lib/env.ts`. Configured via `vitest.config.ts` `setupFiles`.
+**Framework:** Uses Vitest. `tests/setup.ts` stubs all env vars required by `lib/env.ts`. Configured via `vitest.config.ts` `setupFiles`. Refer to current test suite coverage in `tests/README.md`.
 
-**Current test suite:**
+**Maintenance:** Maintain tests for configuration, entitlements, environment validation, navigation, RLS, webhooks, and billing as their phases activate. Keep `tests/setup.ts` aligned with required environment variables; never use real credentials in tests.
 
-| File                         | Status      | Covers                                                                          |
-| ---------------------------- | ----------- | ------------------------------------------------------------------------------- |
-| `tests/config.test.ts`       | ✅ Active   | `APP_CONFIG` and `BILLING_CONFIG` shape                                         |
-| `tests/entitlements.test.ts` | ✅ Active   | Access logic for all subscription statuses                                      |
-| `tests/env.test.ts`          | ✅ Active   | Zod env schema — accepts valid, rejects invalid                                 |
-| `tests/nav.test.ts`          | ✅ Active   | Nav shape, label uniqueness, group isolation                                    |
-| `tests/rls.test.ts`          | ✅ Active   | RLS policy documentation tests                                                  |
-| `tests/webhook.test.ts`      | 🔜 Skeleton | Idempotency, event routing, stale-processing — activates Phase 2                |
-| `tests/billing.test.ts`      | 🔜 Skeleton | Checkout contract, status coverage, `BILLING_CONFIG` policy — activates Phase 2 |
-
-**Fixtures:** `tests/fixtures/subscriptions.ts` — all 8 statuses; `tests/fixtures/webhook-events.ts` — all 5 entitlement events + ignored.
-
-**Coverage targets:** Auth 100% · Webhooks 90% · Entitlements 100% · RLS 80%
-
-### 11. CI
-
-GitHub Actions at `.github/workflows/ci.yml` — 3 parallel jobs on every push/PR to `main`:
-
-1. `validate` — lint + typecheck (~30s)
-2. `build` — Next.js production build (after validate)
-3. `test` — Vitest + coverage (after validate, parallel with build)
-
-All three must pass before merging.
+**CI:** GitHub Actions at `.github/workflows/ci.yml` -> Runs validation, build, and tests. All required CI jobs must pass before merging. When implementation changes, update tests; when test files or statuses change, update the test inventory in this file.
 
 ### 12. Deployment
 
@@ -326,55 +274,70 @@ All three must pass before merging.
 
 ---
 
-## Documentation File Hygiene
+## Documentation System
 
-## Scope and Separation of Concerns
+Each documentation file owns one concern. Write the smallest accurate update in the file that owns the information, then link to it elsewhere.
 
-Use this to decide where to write any new documentation notes. Keep related logic and area of concern in one file. Stay within the file's scope.
+| File                          | Owns                                            | Does not own                               |
+| ----------------------------- | ----------------------------------------------- | ------------------------------------------ |
+| `AGENTS.md`                   | Short orientation, commands, and navigation     | Detailed implementation rules or rationale |
+| `CLAUDE.md`                   | Implementation rules and repository constraints | Version rationale, risks, or phase status  |
+| `docs/architecture.md`        | System behaviour and data flow                  | Decision rationale                         |
+| `docs/schema.md`              | Database and RLS contract                       | Product reasoning                          |
+| `docs/decisions.md`           | Rationale, risks, and pinned versions           | General implementation instructions        |
+| `docs/implementation-plan.md` | Current phases and task status                  | Detailed prompts                           |
+| `docs/prompt-plan.md`         | Agent prompt/workflow text                      | Overall project status                     |
+| `docs/guides/*`               | Specific procedures and practices               | Core architectural rules                   |
+| `README.md`                   | User setup and operation                        | Internal agent rules                       |
+| `CHANGELOG.md`                | Concise user-facing release history             | Internal reasoning or progress notes       |
 
-| File                          | Answers                                                    | Does NOT answer                                             |
-| ----------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
-| `AGENTS.md`                   | Where does X live, and how do I run it?                    | Why is it built this way?                                   |
-| `CLAUDE.md`                   | What are the implementation rules?                         | What version are we pinned to? _(→ `docs/decisions.md`)_    |
-| `docs/architecture.md`        | How does a request flow through the system?                | Why was it built this way?                                  |
-| `docs/schema.md`              | What's the full SQL contract?                              | Why is it shaped this way?                                  |
-| `docs/decisions.md`           | Why was this choice made?                                  | What's the rule for using it?                               |
-| `docs/implementation-plan.md` | What needs to be implemented, and what phase are we at?    | What's the exact agent prompt for this step?                |
-| `docs/prompt-plan.md`         | What's the exact prompt/step text for this agent workflow? | What's the overall task list or phase status?               |
-| `docs/guides/*`               | How do I do this specific task?                            | What's the architectural rule behind it?                    |
-| `README.md`                   | How do I set up, run, migrate, and deploy this — and why?  | What's the implementation rule?                             |
-| `CHANGELOG.md`                | What changed, and in which version?                        | Why did it change? _(→ `docs/decisions.md`)_                |
-| `tests/README.md`             | How is the test suite organized and run?                   | What implementation rule is being tested? _(→ `CLAUDE.md`)_ |
+### Mandatory documentation hygiene
 
-### Writing and editing documentation files
+- Read the relevant source-of-truth document before editing.
+- Edit existing sections; never append a duplicate “Update” or “Notes” section.
+- Do not copy content between docs. Link to the owner instead.
+- Add documentation only when behaviour, workflow, structure, or a user-facing change requires it.
+- Prefer one precise example over several explanatory paragraphs.
+- Remove stale, repeated, or superseded text during the same edit.
+- Keep changes proportional: a one-line code change normally needs no documentation update.
+- Do not create a new documentation file unless no existing file owns the topic.
+- If a proposed edit would materially increase a file’s length, first identify content to trim, merge, or extract.
+- Stop and ask before expanding a living document with speculative guidance.
+- Do not rewrite an entire documentation file when a targeted edit is sufficient.
 
-#### Principles
+> Refer to `docs/guides/ai-agent-tips.md` for more documentation principles and best practices.
 
-- Each file owns one concern. Move content once, link from elsewhere — never copy.
-- Examples are better than descriptions.
-- Accurate beats complete. Reduce risks for stale or outdated docs.
-- Keep it simple stupid. Remove verboseness where possible. Keep lean and readable.
-- Keep it DRY, reduce redunancy and info overlap between docs.
+### Changelog rules (`CHANGELOG.md`)
 
-#### Rules
+Add a concise entry to `CHANGELOG.md` only for a user-facing feature, breaking change, important bug fix, security change, or meaningful repository/deployment change. One entry should normally be one sentence. Do not record every file edit, test run, refactor, or documentation cleanup. It should record only WHAT changed without extra explainations on why or how.
 
-- Fix factual doc bugs immediately when found.
-- Version numbers and risks live in `docs/decisions.md` only; `CLAUDE.md` and `docs/implementation-plan.md` reference them, never duplicate them.
-- `AGENTS.md`'s constraints section is a summary with links, not a copy.
-- The directory tree in `CLAUDE.md` Section 1 is the single source of truth for repo structure; update it in the same commit that adds, moves, or deletes any file or folder.
-- Re-run the DRY audit after major structural changes (trigger phrase: "audit documentation for DRYness").
+## Decisions log rules (`docs/decisions.md`)
 
-> For big documentation edits, refer to `docs/guides/ai-agent-tips.md` for more documentation principles and best practices.
+`docs/decisions.md` records durable architectural or product decisions, their rationale, important trade-offs, rejected alternatives, and upgrade or migration consequences. Add an entry only when a choice affects system boundaries, security, data, dependencies, workflow, or future implementation; do not use it for ordinary implementation notes, temporary experiments, task progress, or changes already explained by the code.
+
+When adding or revising an entry, preserve the existing numbered structure and table of contents, use the format **Decision / Why / Consequences or rejected alternatives**, update related links, and revise the existing decision rather than appending a duplicate. Keep implementation rules in `CLAUDE.md`, phase status in `docs/implementation-plan.md`, and user-facing changes in `CHANGELOG.md`; link to those files instead of copying their content. Archive or remove superseded decisions only when their historical context is no longer useful, and never silently rewrite the rationale for an accepted decision.
+
+### Documentation edit checklist
+
+Before finishing a documentation change, verify:
+
+- The information is in the correct owner file.
+- No existing section already says the same thing.
+- Cross-references point to the owner rather than duplicating content.
+- Stale wording and obsolete examples were removed.
+- The directory tree and test inventory are current if affected.
+- The diff is smaller than or comparable to the value of the change.
+
+> For a substantial documentation change, run a DRY audit using the phrase: `audit documentation for DRYness`.
 
 ## Keeping This File Fresh
 
-- Convention changes → update here **and** `docs/decisions.md`
-- Version changes → update `docs/decisions.md` Decision #12 only
-- File added/moved → update directory tree in §1
-- Test file added/status changed → update test table in §10
+- File or directory change → update the repository tree here.
+- Implementation convention change → update this file and record rationale in `docs/decisions.md`.
+- Version or risk change → update `docs/decisions.md` only, then link here if necessary.
+- Test file or status change → update the test inventory.
+- Phase change → update `docs/implementation-plan.md`, not this file.
 - New stage → re-read and verify against `docs/decisions.md`
-
-> Risks, non-goals, and ADR rationale → [`docs/decisions.md`](./docs/decisions.md)
 
 ---
 

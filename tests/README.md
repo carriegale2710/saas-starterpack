@@ -16,18 +16,19 @@ CI runs all three jobs on every push and PR via `.github/workflows/ci.yml`.
 
 ## Test files
 
-| File | What it covers | Status |
-|---|---|---|
-| `config.test.ts` | `APP_CONFIG` and `BILLING_CONFIG` shape and field presence | ✅ Passing |
-| `entitlements.test.ts` | `hasActiveSubscription()` for every subscription status; `past_due` default-deny policy | ✅ Passing |
-| `env.test.ts` | `lib/env.ts` Zod schema — accepts valid env, rejects missing/invalid vars | ✅ Passing |
-| `nav.test.ts` | `MARKETING_NAV` and `DASHBOARD_NAV` shape, label uniqueness, group isolation | ✅ Passing |
-| `rls.test.ts` | RLS policy documentation — asserts expected policy behaviour for `profiles` and `subscriptions` | ✅ Passing |
-| `webhook.test.ts` | Idempotency logic, event routing contracts, stale-processing recovery threshold | 🔜 Skeleton — fills in as Phase 2 webhook handler is built |
-| `billing.test.ts` | Checkout session contract, subscription fixture coverage, `BILLING_CONFIG` policy | 🔜 Skeleton — fills in as Phase 2 billing code is built |
+| File                   | What it covers                                                                                  | Status                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `config.test.ts`       | `APP_CONFIG` and `BILLING_CONFIG` shape and field presence                                      | ✅ Passing                                                 |
+| `entitlements.test.ts` | `hasActiveSubscription()` for every subscription status; `past_due` default-deny policy         | ✅ Passing                                                 |
+| `env.test.ts`          | `lib/env.ts` Zod schema — accepts valid env, rejects missing/invalid vars                       | ✅ Passing                                                 |
+| `nav.test.ts`          | `MARKETING_NAV` and `DASHBOARD_NAV` shape, label uniqueness, group isolation                    | ✅ Passing                                                 |
+| `rls.test.ts`          | RLS policy documentation — asserts expected policy behaviour for `profiles` and `subscriptions` | ✅ Passing                                                 |
+| `webhook.test.ts`      | Idempotency logic, event routing contracts, stale-processing recovery threshold                 | 🔜 Skeleton — fills in as Phase 2 webhook handler is built |
+| `billing.test.ts`      | Checkout session contract, subscription fixture coverage, `BILLING_CONFIG` policy               | 🔜 Skeleton — fills in as Phase 2 billing code is built    |
 
 **Current status:** 5 active suites · 20 passing tests ✅  
 **Skeleton suites:** 2 (webhook, billing) — contracts defined, assertions activate as implementation lands
+**Coverage targets:** Auth 100% · Webhooks 90% · Entitlements 100% · RLS 80%
 
 ---
 
@@ -35,10 +36,10 @@ CI runs all three jobs on every push and PR via `.github/workflows/ci.yml`.
 
 Shared typed test data lives in `tests/fixtures/`. Always use fixtures instead of inline object literals.
 
-| File | What it provides |
-|---|---|
-| `fixtures/subscriptions.ts` | `MockSubscription` type + `subscriptionFixtures` record covering all 8 statuses (`active`, `trialing`, `past_due`, `canceled`, `unpaid`, `incomplete`, `incomplete_expired`, `paused`) |
-| `fixtures/webhook-events.ts` | Plain-object Stripe event payloads for all 5 entitlement-controlling events + `ignoredEventFixtures` for events the handler must swallow without crashing |
+| File                         | What it provides                                                                                                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fixtures/subscriptions.ts`  | `MockSubscription` type + `subscriptionFixtures` record covering all 8 statuses (`active`, `trialing`, `past_due`, `canceled`, `unpaid`, `incomplete`, `incomplete_expired`, `paused`) |
+| `fixtures/webhook-events.ts` | Plain-object Stripe event payloads for all 5 entitlement-controlling events + `ignoredEventFixtures` for events the handler must swallow without crashing                              |
 
 **Rule:** if the database schema adds a new `subscription_status` enum value, add a matching fixture here. TypeScript will tell you — `subscriptionFixtures` is typed as `Record<SubscriptionStatus, MockSubscription>`.
 
@@ -51,10 +52,10 @@ Shared typed test data lives in `tests/fixtures/`. Always use fixtures instead o
 It stubs the required env vars so `lib/env.ts` doesn't crash at import time:
 
 ```ts
-process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000'
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
 ```
 
 **Rule:** if `lib/env.ts` adds a new required variable (e.g. Stripe vars in Phase 2), add a matching stub here AND in `.github/workflows/ci.yml` `env:`. Never put real API keys in either file.

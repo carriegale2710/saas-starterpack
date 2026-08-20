@@ -2,6 +2,8 @@
 
 > Purpose: Living document of key architectural decisions, trade-offs, and rejected alternatives for the SaaS starter repo.
 > Explains why things are the way they are.
+> For each entry, use the format _*Decision / Why (if not obvious) / Consequences or rejected alternatives (opt.)*_
+> Remember to always update the table of contents below when adding, reordering or removing entries.
 
 ## Table of Contents
 

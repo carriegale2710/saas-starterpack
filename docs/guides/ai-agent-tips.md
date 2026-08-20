@@ -1,6 +1,10 @@
-# Guide: Optimising for AI Agent Workflows
+# Guide: Optimising AI Agent Workflows
 
-Tips for keeping this codebase easy for AI coding agents (Cursor, Claude Code, Copilot, etc.) to understand and work with effectively.
+This guide defines in-scope guidance for keeping AI-agent work in this repository accurate, focused, and maintainable: file discovery, documentation ownership, concise edits, and verification.
+
+> General programming tutorials, speculative architecture, product decisions, and detailed implementation rules belong in the relevant source-of-truth files, not here.
+
+> Keep this guide short. If it starts accumulating implementation rules, move them to `CLAUDE.md`; if it accumulates rationale, move it to `docs/decisions.md`.
 
 ---
 
@@ -11,62 +15,118 @@ Tips for keeping this codebase easy for AI coding agents (Cursor, Claude Code, C
 - **Colocation.** Keep related logic, types, and tests close together. Less jumping around = less context lost.
 - **No `src/` in this repo.** All logic is at the project root under `lib/`. Agents learn this from `AGENTS.md` — don’t create `src/` and split the map.
 
----
+## Read in this order
 
-## Documentation Principles
+1. `AGENTS.md` for orientation, commands, and navigation.
+2. `CLAUDE.md` for Claude-specific implementation rules and constraints.
+3. The source-of-truth document relevant to the task.
+4. The code and tests that implement or verify the behaviour.
 
-- **Accurate beats complete.** Incorrect docs (stale comments, wrong examples) hurt agent output more than missing docs. Delete or update anything you know is wrong.
-- **Examples over descriptions.** One real code snippet teaches an agent a pattern better than a paragraph of prose. See the patterns in `CLAUDE.md` as the model.
-- **Each file owns one concern.** This repo’s docs split is:
-  - `AGENTS.md` — orientation map for any agent
-  - `CLAUDE.md` — all implementation rules and patterns
-  - `docs/architecture.md` — what happens (data flow)
-  - `docs/decisions.md` — why it was decided that way
-  - `docs/schema.md` — database structure
-  - Never let two files contradict each other.
-- **Point, don’t copy.** When one doc references something owned by another, link to it — don’t duplicate it. Duplication creates drift.
+Do not assume a document is current merely because it exists. Check the relevant code, tests, and recent structure before changing a living document.
 
----
+## Documentation ownership
 
-## Agent Instruction Files
+| Topic                                      | Source of truth               | Link from                     |
+| ------------------------------------------ | ----------------------------- | ----------------------------- |
+| Agent orientation and commands             | `AGENTS.md`                   | Other agent instruction files |
+| Implementation rules and constraints       | `CLAUDE.md`                   | Guides and task plans         |
+| System behaviour and data flow             | `docs/architecture.md`        | Implementation docs           |
+| Database schema and RLS                    | `docs/schema.md`              | Code and security docs        |
+| Decision rationale, risks, pinned versions | `docs/decisions.md`           | Rules and plans               |
+| Phase status and task checklist            | `docs/implementation-plan.md` | Task prompts                  |
+| Agent prompt/workflow text                 | `docs/prompt-plan.md`         | Planning docs                 |
+| Specific procedures                        | `docs/guides/*`               | Relevant task docs            |
+| User setup and deployment                  | `README.md`                   | External/project docs         |
+| User-facing release history                | `CHANGELOG.md`                | Release documentation         |
 
-| File | Read by | Purpose |
-|---|---|---|
-| `AGENTS.md` | All agents | Short orientation: stack, commands, directory map, where-to-find-things |
-| `CLAUDE.md` | Claude Code | Full implementation rules, security patterns, scope boundaries |
-| `.cursorrules` | Cursor | Add if you use Cursor — can be a short pointer to `AGENTS.md` |
-
-**Keeping them healthy:**
-- Update `AGENTS.md` directory map when files/folders are added or moved
-- Update `CLAUDE.md` Section 1 tree and test table when structure changes
-- Never let `AGENTS.md` and `CLAUDE.md` contradict each other — `CLAUDE.md` wins on implementation detail
+One topic should have one owner. Link to the owner instead of copying its explanation into another file.
 
 ---
 
-## Naming Conventions
+## Core Documentation writing principles (most important!)
 
-| Avoid | Prefer |
-|---|---|
-| `utils.ts`, `helpers.ts` | `subscriptionUtils.ts`, `authHelpers.ts` |
-| `data.ts`, `store.ts` | `userSessionStore.ts`, `billingData.ts` |
-| `index.ts` for logic | `index.ts` for public API of a module only |
-| Generic folder `misc/` | Split into domain folders |
+1. **Accurate beats complete.** Most important priciple to abide by. Accurate and discoverable documentation is more valuable than comprehensive documentation. Agents should make the smallest change that keeps the repository understandable and correct. Incorrect docs (stale comments, wrong examples) hurt agent output more than missing docs. Delete or update anything you know is wrong.
+2. **Each file owns one concern. Point, don’t copy.** This repo’s docs are split up on purpose. Keep files in their scope. When one doc references something owned by another, link to it — don’t duplicate it. Duplication creates drift.
+3. **Examples over descriptions. Avoid hard-coded values.** One real code snippet teaches an agent a pattern better than a paragraph of prose. See the patterns in `CLAUDE.md` as the model. However, keep example as generic syntax, don't use hardcoded values that might change over time to prevent inconsistencies.
 
-Agents copy naming patterns they see. Consistent, descriptive names reduce hallucinated file paths.
+## Anti-bloat rules
 
----
+- Edit an existing section before creating a new one.
+- Never append `Update`, `Notes`, `Recent changes`, or dated duplicates to a living document.
+- Add content only when it records a durable rule, current behaviour, required procedure, or meaningful user-facing change.
+- Do not document obvious code or repeat information already available from types, tests, or a linked source-of-truth file.
+- Prefer a short rule and one representative example over a long explanation.
+- Remove stale wording, repeated paragraphs, and obsolete examples as part of the same edit.
+- Do not rewrite a whole file for a local change.
+- Do not create a new guide unless the topic has a distinct owner and a repeatable audience.
+- If a proposed addition makes a file substantially longer, first propose what to remove, merge, or extract.
+- Ask before adding speculative guidance, future architecture, or policy that is not supported by the codebase.
 
-## Comments and Types
+## Scope boundaries
 
-- **TypeScript types are free documentation.** Explicit return types, named interfaces, and union types tell agents exactly what a function produces — better than any comment.
-- **Comment the *why*, not the *what*.** Agents can read code; they can’t read your intent. `// idempotency check — Stripe may send the same event twice` is useful. `// update the status` is not.
-- **Mark intentional skeletons.** Skeleton files (`webhook.test.ts`, `billing.test.ts`) have a comment at the top explaining they activate in Phase 2. Without it, agents will try to fill them in.
+### In scope
 
----
+- Keeping repository maps and navigation accurate.
+- Recording implementation conventions that agents must follow.
+- Maintaining links between documentation sources of truth.
+- Explaining repeatable workflows with concise steps.
+- Updating docs when code, tests, structure, or user-facing behaviour changes.
+- Auditing documentation for duplication, stale claims, and unclear ownership.
 
-## What to Avoid
+### Out of scope
 
-- **Stale docs.** A wrong `CLAUDE.md` rule or outdated directory tree actively misleads agents. Run a quick review when a major refactor happens.
-- **Over-documenting.** Docs you won’t maintain become liabilities. If it’s obvious from the code or types, skip the comment.
-- **Barrel exports (`export * from ...`).** They obscure what’s available and make agent suggestions less precise. Prefer explicit named imports.
-- **Magic patterns.** Dynamic imports, runtime codegen, and implicit config make behaviour hard to predict for agents and humans alike.
+- General TypeScript, Next.js, Supabase, Stripe, or Git tutorials.
+- Product strategy, feature proposals, and architectural alternatives without an accepted decision.
+- Full copies of code or schema that are already maintained elsewhere.
+- Per-task scratch notes, conversation transcripts, and progress diaries.
+- Recording every refactor, test run, formatting change, or documentation edit in `CHANGELOG.md`.
+
+## File and code patterns
+
+- Use predictable, domain-specific paths. Keep application logic under root `lib/`; do not create `src/lib/`.
+- Keep related logic, types, and tests close together.
+- Avoid generic names such as `utils.ts`, `helpers.ts`, `data.ts`, `store.ts`, and `misc/`.
+- Use explicit imports and exports. Avoid broad barrel exports that hide module boundaries.
+- Prefer types and tests as executable documentation.
+- Comment the reason or constraint, not the operation obvious from the code.
+- Mark intentional skeletons so agents do not implement deferred work accidentally.
+
+## Safe edit workflow
+
+1. Identify the owning document and inspect the existing section.
+2. Check the code, tests, and linked documents for the current truth.
+3. Make the smallest targeted edit.
+4. Replace or merge stale text instead of appending to it.
+5. Check links, headings, examples, and terminology.
+6. Update `CLAUDE.md`’s tree or test inventory when structure changes.
+7. Update `CHANGELOG.md` only when the change meets its release-entry criteria.
+8. Review the diff for unnecessary expansion and duplication.
+9. Run the relevant tests or validation commands.
+
+## Change-size heuristic
+
+Use the lightest documentation response that preserves accuracy:
+
+| Change                                                                   | Expected documentation action                                                          |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| Internal implementation detail with no changed convention                | Usually no doc change                                                                  |
+| New or changed implementation rule                                       | Update the owning rule document                                                        |
+| New repeatable developer workflow                                        | Add or update a focused guide                                                          |
+| File or directory added, moved, or deleted                               | Update the repository map                                                              |
+| Test file or status changed                                              | Update the test inventory                                                              |
+| User-facing feature, breaking change, security fix, or deployment change | Add one concise changelog entry                                                        |
+| Temporary experiment or rejected option                                  | Keep it out of living docs; use `docs/archive/` only if it has lasting reference value |
+
+## Final documentation check
+
+Before completing a documentation edit, ask:
+
+- Is this information in the correct file?
+- Does another document already express it?
+- Can a link replace this paragraph?
+- Did I remove stale or repeated content?
+- Is the example necessary and accurate?
+- Is the change proportionate to the code change?
+- Would a new agent know what to do without reading unrelated files?
+
+For major changes, run a DRY audit with: `audit documentation for DRYness`.
