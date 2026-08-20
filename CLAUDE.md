@@ -296,6 +296,8 @@ Never leave `lib/database.types.ts` empty or with placeholder types — CI will 
 
 ## Documentation System
 
+The same laziness that applies to code applies to docs. The best documentation is the documentation never written. Before touching any doc, ask: does this information already exist somewhere? If yes, link to it. If the file that owns it needs updating, update only that file.
+
 Each documentation file owns one concern. Write the smallest accurate update in the file that owns the information, then link to it elsewhere.
 
 | File                          | Owns                                            | Does not own                               |
@@ -313,8 +315,18 @@ Each documentation file owns one concern. Write the smallest accurate update in 
 
 ### Mandatory documentation hygiene
 
+Before writing any documentation, stop at the first rung that holds:
+
+1. Does this need to be documented at all? No? Skip it.
+2. Does this information already exist in another file? Link to it, don’t copy it.
+3. Can the existing section be updated in place? Edit it, don’t append.
+4. Can this be one sentence or one example? Do that.
+5. Only then: write the minimum documentation that accurately captures the change.
+
+Rules:
+
 - Read the relevant source-of-truth document before editing.
-- Edit existing sections; never append a duplicate "Update" or "Notes" section.
+- Edit existing sections; never append a duplicate "Update" or "Notes" block.
 - Do not copy content between docs. Link to the owner instead.
 - Add documentation only when behaviour, workflow, structure, or a user-facing change requires it.
 - Prefer one precise example over several explanatory paragraphs.
