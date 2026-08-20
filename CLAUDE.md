@@ -4,27 +4,6 @@
 <!-- Source of truth: use docs/decisions.md for rationale, risks, and pinned versions; use docs/implementation-plan.md for phase status. -->
 <!-- Maintenance rule: edit existing content, do not append duplicate update blocks. -->
 
-## Project Context
-
-This is a **minimal, maintainable modular monolith** for solo-founder subscription SaaS products. Every decision prioritizes shipping speed, maintainability, and security.
-
----
-
-## Core Stack (Non-Negotiable)
-
-- **Next.js 15** with App Router (Server Components by default)
-- **TypeScript** in strict mode
-- **Tailwind CSS** for styling
-- **shadcn/ui-style** components (copy-paste, not library)
-- **Supabase PostgreSQL** with Row Level Security
-- **Supabase Auth** (email/password + OAuth)
-- **Stripe** (Checkout, Customer Portal, Webhooks) — Phase 2
-- **Vercel** for deployment
-- **npm** — do not switch to pnpm or yarn; npm is pre-installed with Node and avoids lockfile conflicts. The lockfile is `package-lock.json` — commit it, never `.gitignore` it.
-- **Node.js 22 LTS** — target runtime. Node 20 is deprecated on Vercel from October 2026. `.nvmrc` pins `22`.
-
----
-
 ## Repository Structure
 
 ```text
@@ -114,7 +93,7 @@ When not to be lazy:
 - Keep vendor-specific code in `lib/vendor/`.
 - Keep optional features in `lib/modules/`; do not include them in the core by default.
 - Use descriptive, domain-specific names. Avoid generic `utils.ts`, `helpers.ts`, `data.ts`, `store.ts`, and `misc/`.
-- Use `index.ts` only as a module’s public API entry point.
+- Use `index.ts` only as a module's public API entry point.
 - Nav links (`MARKETING_NAV`, `DASHBOARD_NAV`) live in `lib/config.ts` — single source of truth. Never duplicate them in component files.
 - The webhook event log table is named `webhook_events` everywhere — in SQL, code, and docs. Never use `stripe_events`.
 
@@ -335,14 +314,14 @@ Each documentation file owns one concern. Write the smallest accurate update in 
 ### Mandatory documentation hygiene
 
 - Read the relevant source-of-truth document before editing.
-- Edit existing sections; never append a duplicate “Update” or “Notes” section.
+- Edit existing sections; never append a duplicate "Update" or "Notes" section.
 - Do not copy content between docs. Link to the owner instead.
 - Add documentation only when behaviour, workflow, structure, or a user-facing change requires it.
 - Prefer one precise example over several explanatory paragraphs.
 - Remove stale, repeated, or superseded text during the same edit.
 - Keep changes proportional: a one-line code change normally needs no documentation update.
 - Do not create a new documentation file unless no existing file owns the topic.
-- If a proposed edit would materially increase a file’s length, first identify content to trim, merge, or extract.
+- If a proposed edit would materially increase a file's length, first identify content to trim, merge, or extract.
 - Stop and ask before expanding a living document with speculative guidance.
 - Do not rewrite an entire documentation file when a targeted edit is sufficient.
 
