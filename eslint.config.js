@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import nextPlugin from '@next/eslint-plugin-next';
 import typescriptParser from '@typescript-eslint/parser';
 import typescript from '@typescript-eslint/eslint-plugin';
+import globals from 'globals';
 
 export default [
   {
@@ -19,6 +20,8 @@ export default [
         },
       },
       globals: {
+        ...globals.browser,
+        ...globals.node,
         React: 'readonly',
       },
     },
