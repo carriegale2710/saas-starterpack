@@ -13,6 +13,10 @@ env:
   NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
   NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
   SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+  STRIPE_SECRET_KEY: sk_test_placeholder
+  STRIPE_WEBHOOK_SECRET: whsec_placeholder
+  STRIPE_PRICE_ID_PRO: price_placeholder
+  STRIPE_API_VERSION: 2025-11-20.acacia
 
 jobs:
   # -------------------------------------------------------------------------
