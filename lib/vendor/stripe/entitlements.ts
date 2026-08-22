@@ -12,22 +12,11 @@
  */
 import { redirect } from 'next/navigation';
 import { BILLING_CONFIG } from '@/lib/config';
-import type { SubscriptionStatus } from '@/lib/database.types';
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { SubscriptionRow } from '@/lib/types';
 
-export interface SubscriptionRecord {
-  id: string;
-  user_id: string;
-  status: SubscriptionStatus;
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
-  stripe_price_id: string | null;
-  current_period_start: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean;
-  created_at: string;
-  updated_at: string;
-}
+// Re-export for consumers who only want the type.
+export type { SubscriptionRow };
 
 /**
  * Fetch the subscription row for a user.
@@ -35,7 +24,7 @@ export interface SubscriptionRecord {
  */
 export async function getCurrentSubscription(
   userId: string
-): Promise<SubscriptionRecord | null> {
+): Promise<SubscriptionRow | null> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('subscriptions')
@@ -55,7 +44,7 @@ export async function getCurrentSubscription(
  * Respects BILLING_CONFIG.pastDueGracePeriod for past_due handling.
  */
 export function hasActiveSubscription(
-  subscription: SubscriptionRecord | null
+  subscription: SubscriptionRow | null
 ): boolean {
   if (!subscription) return false;
 

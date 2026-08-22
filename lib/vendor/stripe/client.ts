@@ -6,7 +6,10 @@
 import Stripe from 'stripe';
 import { env } from '@/lib/env';
 
-// Singleton — reuse across requests in the same server process.
+// Module-level singleton — reuse across requests in the same server process.
+// Safe in production. In Next.js dev mode, Fast Refresh can invalidate the
+// module without restarting the process; _stripe may be recreated on the next
+// call. This is harmless because Stripe SDK instances are stateless.
 let _stripe: Stripe | null = null;
 
 export function getStripe(): Stripe {

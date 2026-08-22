@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { parseWebhookEvent, isEntitlementEvent } from '@/lib/vendor/stripe/webhook';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getStripe } from '@/lib/vendor/stripe/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,9 @@ export async function POST(request: NextRequest) {
 
   // ── 2. Atomic claim — INSERT ON CONFLICT DO NOTHING ───────────────────────
   // If this event_id was already processed we get 0 rows inserted → early exit.
+  // Do NOT use .throwOnError() here — we need to inspect the error code to
+  // distinguish a unique-constraint violation (23505, duplicate) from a real
+  // DB error (network, schema mismatch, etc.).
   const { count: claimed, error: claimError } = await admin
     .from('webhook_events')
     .insert({
@@ -57,13 +61,16 @@ export async function POST(request: NextRequest) {
       payload: event as unknown as Record<string, unknown>,
       status: 'pending',
     })
-    .select('id', { count: 'exact', head: true })
-    .throwOnError();
+    .select('id', { count: 'exact', head: true });
 
   if (claimError) {
-    // Unique constraint violation → already processed
-    console.log('[webhook] Duplicate event, skipping:', event.id);
-    return NextResponse.json({ received: true });
+    if (claimError.code === '23505') {
+      // Unique constraint violation → duplicate event, already processed
+      console.log('[webhook] Duplicate event, skipping:', event.id);
+      return NextResponse.json({ received: true });
+    }
+    console.error('[webhook] Claim insert error:', claimError.message);
+    return NextResponse.json({ error: 'Database error' }, { status: 500 });
   }
 
   if (claimed === 0) {
@@ -115,6 +122,8 @@ async function handleEntitlementEvent(
   event: Stripe.Event,
   admin: AdminClient
 ): Promise<void> {
+  const stripe = getStripe();
+
   switch (event.type) {
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
@@ -127,8 +136,6 @@ async function handleEntitlementEvent(
       const invoice = event.data.object as Stripe.Invoice;
       if (invoice.subscription) {
         // Fetch the full subscription object to get accurate status
-        const { getStripe } = await import('@/lib/vendor/stripe/client');
-        const stripe = getStripe();
         const sub = await stripe.subscriptions.retrieve(
           typeof invoice.subscription === 'string'
             ? invoice.subscription
@@ -141,8 +148,6 @@ async function handleEntitlementEvent(
     case 'invoice.payment_failed': {
       const invoice = event.data.object as Stripe.Invoice;
       if (invoice.subscription) {
-        const { getStripe } = await import('@/lib/vendor/stripe/client');
-        const stripe = getStripe();
         const sub = await stripe.subscriptions.retrieve(
           typeof invoice.subscription === 'string'
             ? invoice.subscription
@@ -160,7 +165,8 @@ async function handleEntitlementEvent(
 /**
  * Upsert a subscription row.
  * The user_id is read from subscription.metadata.user_id — set during checkout.
- * On conflict (same stripe_subscription_id) the row is updated in place.
+ * Conflict key is user_id: one subscription row per user. On plan change or
+ * re-subscribe the existing row is updated in place with the new subscription ID.
  */
 async function upsertSubscription(
   subscription: Stripe.Subscription,
