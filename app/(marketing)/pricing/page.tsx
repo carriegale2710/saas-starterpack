@@ -1,29 +1,41 @@
+/**
+ * Pricing page — public marketing page.
+ * The Pro CTA posts to /api/stripe/checkout which redirects to Stripe.
+ * Authenticated users hit the checkout route directly; unauthenticated
+ * users are redirected to /login by the checkout route (401 → middleware).
+ */
 import Link from 'next/link';
 import { APP_CONFIG } from '@/lib/config';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card, CardContent, CardDescription, CardFooter,
+  CardHeader, CardTitle,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import type { Metadata } from 'next';
 
-export const metadata: Metadata = {
-  title: 'Pricing',
-};
+export const metadata: Metadata = { title: 'Pricing' };
 
 export default function PricingPage() {
   return (
     <section className="container py-20">
       <div className="mb-12 text-center">
         <h1 className="text-4xl font-bold">Simple pricing</h1>
-        <p className="mt-2 text-muted-foreground">Start free, upgrade when you need more.</p>
+        <p className="mt-2 text-muted-foreground">
+          Start free, upgrade when you need more.
+        </p>
       </div>
+
       <div className="mx-auto grid max-w-3xl gap-8 sm:grid-cols-2">
         {/* Free tier */}
         <Card>
           <CardHeader>
             <CardTitle>Free</CardTitle>
             <CardDescription>Get started at no cost</CardDescription>
-            <p className="text-4xl font-bold">$0<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+            <p className="text-4xl font-bold">
+              $0<span className="text-sm font-normal text-muted-foreground">/mo</span>
+            </p>
           </CardHeader>
           <Separator />
           <CardContent className="pt-6">
@@ -48,7 +60,9 @@ export default function PricingPage() {
               <Badge>Popular</Badge>
             </div>
             <CardDescription>For serious builders</CardDescription>
-            <p className="text-4xl font-bold">$29<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+            <p className="text-4xl font-bold">
+              $29<span className="text-sm font-normal text-muted-foreground">/mo</span>
+            </p>
           </CardHeader>
           <Separator />
           <CardContent className="pt-6">
@@ -60,10 +74,12 @@ export default function PricingPage() {
             </ul>
           </CardContent>
           <CardFooter>
-            {/* Checkout action added in Stage 4 */}
-            <Button className="w-full" disabled>
-              Subscribe — coming in Stage 4
-            </Button>
+            {/* Posts to /api/stripe/checkout → redirects to Stripe Checkout */}
+            <form action="/api/stripe/checkout" method="POST" className="w-full">
+              <Button type="submit" className="w-full">
+                Get started with Pro
+              </Button>
+            </form>
           </CardFooter>
         </Card>
       </div>
