@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Stub next/navigation redirect before importing the module under test
-const mockRedirect = vi.fn();
+const { mockRedirect } = vi.hoisted(() => ({ mockRedirect: vi.fn() }));
 vi.mock('next/navigation', () => ({ redirect: mockRedirect }));
 
 // Stub createAdminClient so requireActiveSubscription can be tested in isolation

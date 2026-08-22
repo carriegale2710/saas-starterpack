@@ -12,7 +12,9 @@ import { NextRequest } from 'next/server';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-const mockCreateCheckoutSession = vi.fn();
+const { mockCreateCheckoutSession } = vi.hoisted(() => ({
+  mockCreateCheckoutSession: vi.fn(),
+}));
 vi.mock('@/lib/vendor/stripe/checkout', () => ({
   createCheckoutSession: mockCreateCheckoutSession,
 }));

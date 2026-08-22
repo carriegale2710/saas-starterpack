@@ -16,13 +16,18 @@ import { NextRequest } from 'next/server';
 
 // ── Mocks (must be hoisted before the handler import) ───────────────────────
 
-const mockStripeSubscriptionsRetrieve = vi.fn();
-const mockGetStripe = vi.fn(() => ({
-  subscriptions: { retrieve: mockStripeSubscriptionsRetrieve },
-}));
+const { mockStripeSubscriptionsRetrieve, mockGetStripe, mockParseWebhookEvent } = vi.hoisted(() => {
+  const mockStripeSubscriptionsRetrieve = vi.fn();
+  return {
+    mockStripeSubscriptionsRetrieve,
+    mockGetStripe: vi.fn(() => ({
+      subscriptions: { retrieve: mockStripeSubscriptionsRetrieve },
+    })),
+    mockParseWebhookEvent: vi.fn(),
+  };
+});
 vi.mock('@/lib/vendor/stripe/client', () => ({ getStripe: mockGetStripe }));
 
-const mockParseWebhookEvent = vi.fn();
 vi.mock('@/lib/vendor/stripe/webhook', () => ({
   parseWebhookEvent: mockParseWebhookEvent,
   isEntitlementEvent: (type: string) =>

@@ -11,7 +11,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-const mockCreatePortalSession = vi.fn();
+const { mockCreatePortalSession } = vi.hoisted(() => ({
+  mockCreatePortalSession: vi.fn(),
+}));
 vi.mock('@/lib/vendor/stripe/portal', () => ({
   createPortalSession: mockCreatePortalSession,
 }));
