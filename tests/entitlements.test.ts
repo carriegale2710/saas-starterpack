@@ -10,11 +10,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Stub next/navigation redirect before importing the module under test
-const { mockRedirect } = vi.hoisted(() => ({ mockRedirect: vi.fn() }));
+const { mockRedirect, mockMaybeSingle } = vi.hoisted(() => ({
+  mockRedirect: vi.fn(),
+  mockMaybeSingle: vi.fn(),
+}));
 vi.mock('next/navigation', () => ({ redirect: mockRedirect }));
 
 // Stub createAdminClient so requireActiveSubscription can be tested in isolation
-const mockMaybeSingle = vi.fn();
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: () => ({
