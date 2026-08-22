@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "name": "saas-starterpack",
   "version": "0.1.0",
   "private": true,
@@ -9,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -29,7 +30,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.400.0",
-    "next": "^15.5.21",
+    "next": "^16.3.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "stripe": "^17.7.0",
