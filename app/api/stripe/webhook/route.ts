@@ -58,10 +58,15 @@ export async function POST(request: NextRequest) {
     .insert({
       stripe_event_id: event.id,
       event_type: event.type,
-      payload: event as unknown as Record<string, unknown>,
+      payload: {
+        id: event.id,
+        type: event.type,
+        data: event.data,
+        created: event.created,
+      } as unknown as Record<string, unknown>,
       status: 'pending',
     })
-    .select('id', { count: 'exact', head: true });
+    .select('id', { count: 'exact' });
 
   if (claimError) {
     if (claimError.code === '23505') {
