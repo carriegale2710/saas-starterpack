@@ -3,21 +3,22 @@
  *
  * Receives and processes Stripe webhook events.
  *
- * Security:     Signature verified with STRIPE_WEBHOOK_SECRET.
- * Idempotency:  Atomic claim pattern — INSERT ON CONFLICT DO NOTHING.
- * Retry-safe:   Events already processed return 200 immediately.
+ * Security: Signature verified with STRIPE_WEBHOOK_SECRET.
+ * Idempotency: Atomic claim pattern — INSERT ON CONFLICT DO NOTHING.
+ * Retry-safe: Events already processed return 200 immediately.
  *
  * Handled events (ENTITLEMENT_EVENTS):
- *   customer.subscription.created
- *   customer.subscription.updated
- *   customer.subscription.deleted
- *   invoice.paid
- *   invoice.payment_failed
+ * customer.subscription.created
+ * customer.subscription.updated
+ * customer.subscription.deleted
+ * invoice.paid
+ * invoice.payment_failed
  *
  * All other events are acknowledged (200) without processing.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import type Stripe from 'stripe';
+import type { Json } from '@/lib/database.types';
 import { parseWebhookEvent, isEntitlementEvent } from '@/lib/vendor/stripe/webhook';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStripe } from '@/lib/vendor/stripe/client';
@@ -55,18 +56,20 @@ export async function POST(request: NextRequest) {
   // DB error (network, schema mismatch, etc.).
   const { count: claimed, error: claimError } = await admin
     .from('webhook_events')
-    .insert({
-      stripe_event_id: event.id,
-      event_type: event.type,
-      payload: {
-        id: event.id,
-        type: event.type,
-        data: event.data,
-        created: event.created,
-      } as unknown as Record<string, unknown>,
-      status: 'pending',
-    })
-    .select('id', { count: 'exact' });
+    .insert(
+      {
+        stripe_event_id: event.id,
+        event_type: event.type,
+        payload: {
+          id: event.id,
+          type: event.type,
+          created: event.created,
+        } as Json,
+        status: 'pending',
+      },
+      { count: 'exact' }
+    )
+    .select('id');
 
   if (claimError) {
     if (claimError.code === '23505') {
